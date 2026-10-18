@@ -1,0 +1,14 @@
+pandas
+numpy
+scipy>=1.9.0
+scikit-learn
+lightgbm
+econml
+dowhy
+fastapi
+uvicorn
+pydantic
+pytest
+python-multipart
+joblib
+requests
