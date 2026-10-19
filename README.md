@@ -91,7 +91,7 @@ Generated via `backend/data/generate.py` ($N = 20,000$ customers) from a structu
    - Extreme propensity trimming: 4 out of 20,000 units trimmed (< 0.02%).
 3. **Frontend Dashboard (`frontend/`)**:
    - Sidebar navigation: **Data & Budget**, **Causal Audit**, **Uplift & DML**, **Prescription**.
-   - **Data & Budget View**: Drag-and-drop CSV upload, dynamic column mapping, promotional budget ($5,000) and unit gross margin ($35.00) inputs, discount option tags, and 50-row paginated preview.
+   - **Data & Budget View**: Drag-and-drop CSV upload, dynamic column mapping, promotional budget ($5,000) and unit gross margin ($35.00) inputs, discount option tags, searchable and sortable 50-row paginated preview, and full active-dataset CSV export.
    - **Causal Audit View**:
      - Interactive SVG Causal DAG visualization.
      - Plotly.js propensity overlap histograms with interactive arm toggling.

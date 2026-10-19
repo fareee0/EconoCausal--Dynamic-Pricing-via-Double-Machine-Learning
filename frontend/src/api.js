@@ -12,6 +12,11 @@ export const getDataSummary = async () => {
   return res.data;
 };
 
+export const exportDataset = async () => {
+  const res = await api.get('/data/export', { responseType: 'blob' });
+  return res.data;
+};
+
 export const uploadDataset = async (file) => {
   const formData = new FormData();
   formData.append('file', file);

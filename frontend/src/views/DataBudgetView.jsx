@@ -1,18 +1,26 @@
-import React, { useState, useRef } from 'react';
-import { UploadCloud, CheckCircle, RefreshCw, DollarSign, Database, SlidersHorizontal, Table } from 'lucide-react';
-import { uploadDataset, updateConfig } from '../api';
+import React, { useMemo, useState, useRef } from 'react';
+import { UploadCloud, CheckCircle, SlidersHorizontal, Table, Search, ChevronLeft, ChevronRight, Download, ArrowUpDown } from 'lucide-react';
+import { exportDataset, uploadDataset, updateConfig } from '../api';
+
+const EMPTY_ARRAY = [];
 
 export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateAudit }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [previewSearch, setPreviewSearch] = useState('');
+  const [sortColumn, setSortColumn] = useState('');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const fileInputRef = useRef(null);
 
   // Form states initialized from dataSummary
   const [treatment, setTreatment] = useState(dataSummary?.column_mapping?.treatment || 'discount_amount');
   const [outcome, setOutcome] = useState(dataSummary?.column_mapping?.outcome || 'purchased');
-  const [revenue, setRevenue] = useState(dataSummary?.column_mapping?.revenue || 'revenue');
+  const [revenue] = useState(dataSummary?.column_mapping?.revenue || 'revenue');
   const [confounders, setConfounders] = useState(dataSummary?.column_mapping?.confounders || []);
 
   const [budget, setBudget] = useState(dataSummary?.budget_config?.total_budget || 5000);
@@ -44,6 +52,10 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       setSuccessMsg('');
       const updatedSummary = await uploadDataset(file);
       onDataRefresh(updatedSummary);
+      setPreviewSearch('');
+      setSortColumn('');
+      setSortDirection('asc');
+      setCurrentPage(1);
       setSuccessMsg(`Successfully uploaded ${file.name} (${updatedSummary.row_count.toLocaleString()} rows)`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
@@ -84,6 +96,36 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
     }
   };
 
+  const handleExportDataset = async () => {
+    try {
+      setExporting(true);
+      const csv = await exportDataset();
+      const url = URL.createObjectURL(csv);
+      const link = document.createElement('a');
+      const filename = (dataSummary?.filename || 'campaign.csv').replace(/\.csv$/i, '');
+      link.href = url;
+      link.download = `${filename}-export.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      alert(`Export error: ${err?.response?.data?.detail || err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+
   const toggleConfounder = (col) => {
     if (confounders.includes(col)) {
       setConfounders(confounders.filter((c) => c !== col));
@@ -92,8 +134,31 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
     }
   };
 
-  const columns = dataSummary?.columns || [];
-  const preview = dataSummary?.preview || [];
+  const columns = dataSummary?.columns || EMPTY_ARRAY;
+  const preview = dataSummary?.preview || EMPTY_ARRAY;
+  const filteredPreview = useMemo(() => {
+    const query = previewSearch.trim().toLocaleLowerCase();
+    const filtered = query
+      ? preview.filter((row) => columns.some((column) =>
+        String(row[column] ?? '').toLocaleLowerCase().includes(query)))
+      : preview;
+
+    if (!sortColumn) return filtered;
+
+    return [...filtered].sort((a, b) => {
+      const left = a[sortColumn];
+      const right = b[sortColumn];
+      const leftNumber = Number(left);
+      const rightNumber = Number(right);
+      const bothNumeric = left !== '' && right !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber);
+      const comparison = bothNumeric
+        ? leftNumber - rightNumber
+        : String(left ?? '').localeCompare(String(right ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [columns, preview, previewSearch, sortColumn, sortDirection]);
+  const pageCount = Math.max(1, Math.ceil(filteredPreview.length / pageSize));
+  const pageRows = filteredPreview.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div>
@@ -300,17 +365,47 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
 
       {/* Dataset Preview Table */}
       <div className="card">
-        <div className="card-title">
-          <Table size={20} color="#38bdf8" />
-          <span>Dataset Preview (First 50 Rows)</span>
+        <div className="preview-heading">
+          <div className="card-title" style={{ marginBottom: 0 }}>
+            <Table size={20} color="#38bdf8" />
+            <span>Dataset Preview (First 50 Rows)</span>
+          </div>
+          <button className="btn btn-secondary" onClick={handleExportDataset} disabled={exporting || !dataSummary?.row_count}>
+            <Download size={16} />
+            {exporting ? 'Exporting...' : 'Export full CSV'}
+          </button>
+        </div>
+        <div className="preview-toolbar">
+          <label className="preview-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              className="form-input"
+              type="search"
+              value={previewSearch}
+              onChange={(event) => {
+                setPreviewSearch(event.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search preview rows..."
+              aria-label="Search dataset preview"
+            />
+          </label>
+          <span className="preview-count">
+            {filteredPreview.length} of {preview.length} preview rows
+          </span>
         </div>
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
               <tr>
                 {columns.map((col) => (
-                  <th key={col}>
-                    {col}
+                  <th key={col} aria-sort={sortColumn === col ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                    <button className="table-sort-button" onClick={() => handleSort(col)}>
+                      {col}
+                      {sortColumn === col
+                        ? <span aria-hidden="true">{sortDirection === 'asc' ? ' ↑' : ' ↓'}</span>
+                        : <ArrowUpDown size={12} aria-hidden="true" />}
+                    </button>
                     {col === treatment && <span className="badge badge-warning" style={{ marginLeft: '4px' }}>T</span>}
                     {col === outcome && <span className="badge badge-success" style={{ marginLeft: '4px' }}>Y</span>}
                   </th>
@@ -318,15 +413,55 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
               </tr>
             </thead>
             <tbody>
-              {preview.map((row, idx) => (
-                <tr key={idx}>
+              {pageRows.map((row, idx) => (
+                <tr key={row.customer_id ?? row.id ?? (currentPage - 1) * pageSize + idx}>
                   {columns.map((col) => (
                     <td key={col}>{row[col] !== undefined ? String(row[col]) : ''}</td>
                   ))}
                 </tr>
               ))}
+              {pageRows.length === 0 && (
+                <tr>
+                  <td colSpan={Math.max(columns.length, 1)} className="preview-empty">No preview rows match that search.</td>
+                </tr>
+              )}
             </tbody>
           </table>
+        </div>
+        <div className="preview-pagination">
+          <label className="preview-page-size">
+            Rows per page
+            <select
+              className="form-select"
+              value={pageSize}
+              onChange={(event) => {
+                setPageSize(Number(event.target.value));
+                setCurrentPage(1);
+              }}
+              aria-label="Rows per page"
+            >
+              {[10, 25, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </label>
+          <span className="preview-count">Page {Math.min(currentPage, pageCount)} of {pageCount}</span>
+          <div className="preview-page-buttons">
+            <button
+              className="btn btn-secondary"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={16} /> Previous
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
+              disabled={currentPage >= pageCount}
+              aria-label="Next page"
+            >
+              Next <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ Tests:
 - FastAPI endpoints (/health, /data/summary, /audit)
 """
 
+import io
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -136,6 +137,14 @@ def test_fastapi_endpoints():
     assert data_summary["row_count"] > 0
     assert len(data_summary["columns"]) >= 10
     assert len(data_summary["preview"]) > 0
+
+    res_export = client.get("/data/export")
+    assert res_export.status_code == 200
+    assert res_export.headers["content-type"].startswith("text/csv")
+    assert "attachment; filename=" in res_export.headers["content-disposition"]
+    exported_data = pd.read_csv(io.BytesIO(res_export.content))
+    assert len(exported_data) == data_summary["row_count"]
+    assert list(exported_data.columns) == data_summary["columns"]
 
     res_audit = client.get("/audit")
     assert res_audit.status_code == 200

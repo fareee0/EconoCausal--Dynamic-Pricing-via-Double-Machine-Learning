@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import io
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.schemas import (
@@ -108,6 +108,28 @@ def get_data_summary():
         preview=preview_records,
         column_mapping=STATE["column_mapping"],
         budget_config=STATE["budget_config"],
+    )
+
+
+@app.get("/data/export")
+def export_dataset():
+    """Download the complete active dataset as a CSV file."""
+    if STATE["df"] is None:
+        STATE["df"] = load_default_dataset()
+
+    filename = Path(STATE["filename"]).name
+    filename = "".join(
+        char if char.isascii() and (char.isalnum() or char in "._-") else "_"
+        for char in filename
+    ).strip("._")
+    filename = filename or "campaign"
+    if not filename.lower().endswith(".csv"):
+        filename = f"{filename}.csv"
+
+    return Response(
+        content=STATE["df"].to_csv(index=False),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
