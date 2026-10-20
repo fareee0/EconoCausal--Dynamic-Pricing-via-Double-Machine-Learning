@@ -96,6 +96,11 @@ Generated via `backend/data/generate.py` ($N = 20,000$ customers) from a structu
      - Interactive SVG Causal DAG visualization.
      - Plotly.js propensity overlap histograms with interactive arm toggling.
      - Covariate balance table with unweighted vs. IPW-weighted SMDs and green badges.
+   - **Prescription View**: Fits purchase-response models for the control and configured discount arms, then uses SciPy MILP to recommend at most one promotion per customer under the expected-spend budget cap. The view reports expected spend and modeled incremental profit and exports the full recommendation list as CSV.
+
+### Prescription estimate limitations
+
+The prescription endpoint uses separate logistic-regression response models trained on observed records within each treatment arm. Its recommendations are an observational response-model benchmark, not validated causal uplift estimates; unmeasured confounding and model misspecification can affect the estimates. Run the optimizer from the Prescription view after saving the column mapping and budget configuration in Data & Budget.
 
 ---
 

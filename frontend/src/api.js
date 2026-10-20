@@ -38,3 +38,8 @@ export const getCausalAudit = async () => {
   const res = await api.get('/audit');
   return res.data;
 };
+
+export const runPrescription = async () => {
+  const res = await api.post('/prescription');
+  return res.data;
+};

@@ -15,10 +15,11 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
+from backend.app.main import STATE, app
 from backend.causal.graph import get_dag_json, identify_causal_effect
 from backend.causal.propensity import PropensityAuditor, trim_extreme_propensities
 from backend.data.generate import generate_retail_dataset
+from backend.app.schemas import BudgetConfig, ColumnMapping
 
 
 @pytest.fixture(scope="session")
@@ -153,3 +154,26 @@ def test_fastapi_endpoints():
     assert "balance_table" in audit
     assert "overlap" in audit
     assert audit["summary_metrics"]["pct_balanced_smd_under_0_10"] >= 80.0
+
+
+def test_prescription_allocates_within_budget(dataset_fixture, monkeypatch):
+    df_obs, _ = dataset_fixture
+    monkeypatch.setitem(STATE, "df", df_obs)
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+    monkeypatch.setitem(
+        STATE,
+        "budget_config",
+        BudgetConfig(total_budget=150, margin_per_purchase=35, discount_options=[10, 20]),
+    )
+    client = TestClient(app)
+
+    response = client.post("/prescription")
+
+    assert response.status_code == 200, response.text
+    plan = response.json()
+    assert plan["observations"] == len(df_obs)
+    assert plan["expected_spend"] <= plan["budget"]
+    assert plan["recommended_customers"] == len(plan["recommendations"])
+    assert len({row["row_index"] for row in plan["recommendations"]}) == plan["recommended_customers"]
+    assert all(row["expected_incremental_profit"] > 0 for row in plan["recommendations"])
+    assert "not a validated causal uplift estimate" in plan["estimation_note"]

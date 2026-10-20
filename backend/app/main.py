@@ -16,6 +16,14 @@ import io
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import numpy as np
+from scipy.optimize import Bounds, LinearConstraint, milp
+from scipy.sparse import coo_matrix
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from backend.app.schemas import (
     AuditResponse,
@@ -250,3 +258,190 @@ def get_causal_audit():
 
     STATE["audit_cache"] = response_data
     return response_data
+
+
+@app.post("/prescription")
+def create_prescription():
+    """Estimate response by discount arm and optimize customer-level allocation."""
+    if STATE["df"] is None:
+        STATE["df"] = load_default_dataset()
+
+    df: pd.DataFrame = STATE["df"]
+    mapping: ColumnMapping = STATE["column_mapping"]
+    budget: BudgetConfig = STATE["budget_config"]
+    required_columns = [mapping.treatment, mapping.outcome, *mapping.confounders]
+    missing_columns = sorted(set(required_columns) - set(df.columns))
+    if missing_columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Prescription columns are missing from the dataset: {', '.join(missing_columns)}",
+        )
+    if not mapping.confounders:
+        raise HTTPException(status_code=400, detail="Select at least one confounder before optimizing.")
+    if mapping.treatment in mapping.confounders or mapping.outcome in mapping.confounders:
+        raise HTTPException(
+            status_code=400,
+            detail="The treatment and outcome columns cannot also be used as confounders.",
+        )
+
+    discounts = [float(value) for value in budget.discount_options]
+    if not discounts or any(not np.isfinite(value) or value <= 0 for value in discounts):
+        raise HTTPException(status_code=400, detail="Configure at least one positive, finite discount option.")
+    if len(set(discounts)) != len(discounts):
+        raise HTTPException(status_code=400, detail="Discount options must not contain duplicates.")
+    if not np.isfinite(budget.total_budget) or budget.total_budget <= 0:
+        raise HTTPException(status_code=400, detail="The total budget must be positive and finite.")
+    if not np.isfinite(budget.margin_per_purchase) or budget.margin_per_purchase <= 0:
+        raise HTTPException(status_code=400, detail="The margin per purchase must be positive and finite.")
+
+    treatment = pd.to_numeric(df[mapping.treatment], errors="coerce")
+    outcome = pd.to_numeric(df[mapping.outcome], errors="coerce")
+    complete_rows = treatment.notna() & outcome.isin([0, 1])
+    if not complete_rows.any():
+        raise HTTPException(status_code=400, detail="No rows have valid treatment and binary outcome values.")
+
+    arms = [0.0, *discounts]
+    missing_arms = [arm for arm in arms if not (treatment[complete_rows] == arm).any()]
+    if missing_arms:
+        arms_text = ", ".join(f"${arm:g}" for arm in missing_arms)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The dataset has no observations for these treatment arms: {arms_text}.",
+        )
+
+    features = df.loc[:, mapping.confounders]
+    numeric_columns = [
+        column for column in mapping.confounders
+        if pd.api.types.is_numeric_dtype(features[column])
+    ]
+    categorical_columns = [column for column in mapping.confounders if column not in numeric_columns]
+    transformers = []
+    if numeric_columns:
+        transformers.append(
+            (
+                "numeric",
+                make_pipeline(
+                    SimpleImputer(strategy="median"),
+                    StandardScaler(),
+                ),
+                numeric_columns,
+            )
+        )
+    if categorical_columns:
+        transformers.append(
+            (
+                "categorical",
+                make_pipeline(
+                    SimpleImputer(strategy="most_frequent"),
+                    OneHotEncoder(handle_unknown="ignore"),
+                ),
+                categorical_columns,
+            )
+        )
+    preprocessor = ColumnTransformer(transformers)
+
+    response_probabilities = {}
+    for arm in arms:
+        arm_rows = complete_rows & (treatment == arm)
+        arm_outcomes = outcome.loc[arm_rows].astype(int)
+        if arm_outcomes.nunique() != 2:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Both purchase outcomes (0 and 1) are required for the ${arm:g} treatment arm.",
+            )
+        estimator = make_pipeline(
+            preprocessor,
+            LogisticRegression(max_iter=500),
+        )
+        estimator.fit(features.loc[arm_rows], arm_outcomes)
+        response_probabilities[arm] = estimator.predict_proba(features)[:, 1]
+
+    customer_indices = []
+    selected_discounts = []
+    expected_spends = []
+    incremental_profits = []
+    for discount in discounts:
+        purchase_probability = response_probabilities[discount]
+        spend = purchase_probability * discount
+        incremental_profit = (
+            (purchase_probability - response_probabilities[0]) * budget.margin_per_purchase
+            - spend
+        )
+        eligible_indices = np.flatnonzero((incremental_profit > 0) & (spend > 0))
+        customer_indices.extend(eligible_indices.tolist())
+        selected_discounts.extend([discount] * len(eligible_indices))
+        expected_spends.extend(spend[eligible_indices].tolist())
+        incremental_profits.extend(incremental_profit[eligible_indices].tolist())
+
+    selected_rows = []
+    if customer_indices:
+        variable_count = len(customer_indices)
+        variable_indices = np.arange(variable_count)
+        constraints = coo_matrix(
+            (
+                np.concatenate((np.ones(variable_count), expected_spends)),
+                (
+                    np.concatenate((customer_indices, np.full(variable_count, len(df)))),
+                    np.concatenate((variable_indices, variable_indices)),
+                ),
+            ),
+            shape=(len(df) + 1, variable_count),
+        ).tocsc()
+        upper_bounds = np.full(len(df) + 1, np.inf)
+        upper_bounds[:len(df)] = 1
+        upper_bounds[-1] = budget.total_budget
+        result = milp(
+            c=-np.asarray(incremental_profits),
+            integrality=np.ones(variable_count),
+            bounds=Bounds(0, 1),
+            constraints=LinearConstraint(constraints, 0, upper_bounds),
+        )
+        if not result.success or result.x is None:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Budget optimization did not complete: {result.message}",
+            )
+        selected_rows = np.flatnonzero(result.x > 0.5).tolist()
+
+    recommendations = []
+    for variable_index in selected_rows:
+        row_index = customer_indices[variable_index]
+        discount = selected_discounts[variable_index]
+        recommendations.append(
+            {
+                "row_index": int(row_index),
+                "discount": discount,
+                "predicted_purchase_without_discount": round(
+                    float(response_probabilities[0][row_index]), 4
+                ),
+                "predicted_purchase_with_discount": round(
+                    float(response_probabilities[discount][row_index]), 4
+                ),
+                "expected_spend": round(expected_spends[variable_index], 2),
+                "expected_incremental_profit": round(incremental_profits[variable_index], 2),
+            }
+        )
+
+    total_spend = sum(expected_spends[index] for index in selected_rows)
+    total_profit = sum(incremental_profits[index] for index in selected_rows)
+    return {
+        "observations": int(len(df)),
+        "recommended_customers": len(recommendations),
+        "budget": round(float(budget.total_budget), 2),
+        "expected_spend": round(total_spend, 2),
+        "expected_incremental_profit": round(total_profit, 2),
+        "expected_incremental_purchases": round(
+            sum(
+                row["predicted_purchase_with_discount"]
+                - row["predicted_purchase_without_discount"]
+                for row in recommendations
+            ),
+            2,
+        ),
+        "estimation_note": (
+            "Response probabilities are fitted separately within each observed discount arm "
+            "using the configured confounders. This is an observational response-model "
+            "benchmark, not a validated causal uplift estimate."
+        ),
+        "recommendations": recommendations,
+    }
