@@ -16,7 +16,7 @@ export default function Sidebar({ activeView, setActiveView, isConnected = true 
         <div>
           <div className="brand-title">EconoCausal</div>
           <div style={{ display: 'flex', alignItems: 'center', marginTop: '2px' }}>
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Double ML Optimizer</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Double ML Optimizer</span>
             <span className="brand-badge">v1.0</span>
           </div>
         </div>
@@ -39,8 +39,8 @@ export default function Sidebar({ activeView, setActiveView, isConnected = true 
                     fontSize: '0.65rem',
                     padding: '2px 6px',
                     borderRadius: '4px',
-                    background: isActive ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)',
-                    color: isActive ? '#c7d2fe' : '#64748b'
+                    background: isActive ? 'var(--primary-light)' : '#f1f4f8',
+                    color: isActive ? 'var(--primary)' : 'var(--text-dim)'
                   }}>
                     {item.badge}
                   </span>
@@ -57,7 +57,7 @@ export default function Sidebar({ activeView, setActiveView, isConnected = true 
           <span>{isConnected ? 'FastAPI Backend Online' : 'Backend Connecting...'}</span>
         </div>
         <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <ShieldCheck size={14} color="#6366f1" />
+          <ShieldCheck size={14} color="var(--primary)" />
           <span>Unconfoundedness Verified</span>
         </div>
       </div>

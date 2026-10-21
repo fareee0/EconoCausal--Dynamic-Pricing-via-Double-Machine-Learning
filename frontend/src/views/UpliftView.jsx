@@ -15,12 +15,12 @@ export default function UpliftView() {
 
       <div className="card">
         <div className="card-title">
-          <TrendingUp size={20} color="#818cf8" />
+          <TrendingUp size={20} color="var(--primary)" />
           <span>Phase 2 Engine Staging: Double ML (EconML)</span>
         </div>
-        <p style={{ color: '#94a3b8', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '20px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '20px' }}>
           This view will train EconML's <code>CausalForestDML</code> and <code>LinearDML</code> with cross-fitting (K = 5) and LightGBM / Random Forest nuisance models to estimate individual treatment effects:
-          &nbsp;<code style={{ color: '#a5b4fc' }}>&tau;<sub>10</sub>(X)</code> and <code style={{ color: '#a5b4fc' }}>&tau;<sub>20</sub>(X)</code>.
+          &nbsp;<code style={{ color: 'var(--primary)' }}>&tau;<sub>10</sub>(X)</code> and <code style={{ color: 'var(--primary)' }}>&tau;<sub>20</sub>(X)</code>.
         </p>
 
         <div className="kpi-grid">
@@ -31,12 +31,12 @@ export default function UpliftView() {
           </div>
           <div className="kpi-card">
             <span className="kpi-label">Uplift Metric Target</span>
-            <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#38bdf8' }}>Qini / AUUC</span>
+            <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-cyan)' }}>Qini / AUUC</span>
             <span className="kpi-subtext">Area Under Uplift Curve</span>
           </div>
           <div className="kpi-card">
             <span className="kpi-label">Ground Truth Validation</span>
-            <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#34d399' }}>PEHE / RMSE</span>
+            <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-emerald)' }}>PEHE / RMSE</span>
             <span className="kpi-subtext">Evaluated against synthetic truth</span>
           </div>
           <div className="kpi-card">

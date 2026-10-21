@@ -175,7 +175,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       </div>
 
       {successMsg && (
-        <div className="info-box" style={{ borderColor: '#10b981', background: 'rgba(16,185,129,0.1)', color: '#34d399' }}>
+        <div className="info-box" style={{ borderColor: '#b9e1cd', background: 'var(--accent-emerald-light)', color: '#14734f' }}>
           <CheckCircle size={18} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
           {successMsg}
         </div>
@@ -226,7 +226,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
         <h3 style={{ marginBottom: '6px' }}>
           {uploading ? 'Processing Dataset...' : 'Drag & drop campaign CSV, or browse'}
         </h3>
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
           Supports transaction and customer features. Synthetic 20k retail benchmark loaded by default.
         </p>
       </div>
@@ -234,7 +234,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       {/* Column Mapping & Budget Form */}
       <div className="card">
         <div className="card-title">
-          <SlidersHorizontal size={20} color="#818cf8" />
+          <SlidersHorizontal size={20} color="var(--primary)" />
           <span>Causal Variable Mapping & Economic Parameters</span>
         </div>
 
@@ -253,7 +253,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                   </option>
                 ))}
               </select>
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
                 Discrete discount levels (e.g. 0, 10, 20)
               </span>
             </div>
@@ -271,7 +271,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                   </option>
                 ))}
               </select>
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
                 Primary binary purchase decision (0 or 1)
               </span>
             </div>
@@ -286,7 +286,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                 onChange={(e) => setBudget(e.target.value)}
                 required
               />
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
                 Hard spend ceiling for MILP knapsack
               </span>
             </div>
@@ -301,7 +301,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                 onChange={(e) => setMargin(e.target.value)}
                 required
               />
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
                 Contribution margin before promotional cost
               </span>
             </div>
@@ -316,7 +316,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                 placeholder="10, 20"
                 required
               />
-              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
                 Comma-separated active promotion arms
               </span>
             </div>
@@ -337,9 +337,9 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                       key={col}
                       onClick={() => toggleConfounder(col)}
                       style={{
-                        background: isSelected ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                        border: isSelected ? '1px solid #6366f1' : '1px solid rgba(255, 255, 255, 0.1)',
-                        color: isSelected ? '#ffffff' : '#94a3b8',
+                        background: isSelected ? 'var(--primary-light)' : '#ffffff',
+                        border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                        color: isSelected ? 'var(--primary)' : 'var(--text-muted)',
                         padding: '6px 12px',
                         borderRadius: '6px',
                         cursor: 'pointer',
@@ -367,7 +367,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       <div className="card">
         <div className="preview-heading">
           <div className="card-title" style={{ marginBottom: 0 }}>
-            <Table size={20} color="#38bdf8" />
+            <Table size={20} color="var(--accent-cyan)" />
             <span>Dataset Preview (First 50 Rows)</span>
           </div>
           <button className="btn btn-secondary" onClick={handleExportDataset} disabled={exporting || !dataSummary?.row_count}>

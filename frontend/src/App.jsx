@@ -41,7 +41,7 @@ export default function App() {
         {loading && !dataSummary ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '16px' }}>
             <div className="spinner" style={{ width: '40px', height: '40px' }}></div>
-            <div style={{ color: '#94a3b8' }}>Connecting to EconoCausal Engine...</div>
+            <div style={{ color: 'var(--text-muted)' }}>Connecting to EconoCausal Engine...</div>
           </div>
         ) : (
           <>

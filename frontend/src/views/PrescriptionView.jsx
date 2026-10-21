@@ -67,10 +67,10 @@ export default function PrescriptionView() {
 
       <div className="card">
         <div className="card-title">
-          <Sliders size={20} color="#10b981" />
+          <Sliders size={20} color="var(--accent-emerald)" />
           <span>Multiple-Choice Budget Allocation</span>
         </div>
-        <p style={{ color: '#94a3b8', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '20px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', lineHeight: '1.6', marginBottom: '20px' }}>
           Fit purchase-response models for each configured discount arm, then use a mixed-integer
           optimizer to select at most one promotion per customer while keeping expected discount
           spend within the saved campaign budget.
@@ -104,14 +104,14 @@ export default function PrescriptionView() {
               </div>
               <div className="kpi-card">
                 <span className="kpi-label">Estimated Incremental Profit</span>
-                <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#34d399' }}>
+                <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-emerald)' }}>
                   {formatCurrency(result.expected_incremental_profit)}
                 </span>
                 <span className="kpi-subtext">after expected promotional cost</span>
               </div>
               <div className="kpi-card">
                 <span className="kpi-label">Estimated Incremental Purchases</span>
-                <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#38bdf8' }}>
+                <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-cyan)' }}>
                   {result.expected_incremental_purchases}
                 </span>
                 <span className="kpi-subtext">response-model estimate</span>
@@ -179,21 +179,21 @@ export default function PrescriptionView() {
               </div>
               <div className="kpi-card">
                 <span className="kpi-label">Budget constraint</span>
-                <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#f59e0b' }}>
+                <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-amber)' }}>
                   <DollarSign size={18} style={{ verticalAlign: 'middle' }} /> Hard cap
                 </span>
                 <span className="kpi-subtext">Expected spend cannot exceed budget</span>
               </div>
               <div className="kpi-card">
                 <span className="kpi-label">Allocation objective</span>
-                <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#6366f1' }}>
+                <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--primary)' }}>
                   <TrendingUp size={18} style={{ verticalAlign: 'middle' }} /> Profit
                 </span>
                 <span className="kpi-subtext">Positive modeled incremental value</span>
               </div>
               <div className="kpi-card">
                 <span className="kpi-label">Customer output</span>
-                <span className="kpi-value" style={{ fontSize: '1.3rem', color: '#34d399' }}>
+                <span className="kpi-value" style={{ fontSize: '1.3rem', color: 'var(--accent-emerald)' }}>
                   <Target size={18} style={{ verticalAlign: 'middle' }} /> Exportable
                 </span>
                 <span className="kpi-subtext">Download a full targeting CSV</span>

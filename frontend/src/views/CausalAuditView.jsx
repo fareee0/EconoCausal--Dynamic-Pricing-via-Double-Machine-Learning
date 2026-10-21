@@ -30,14 +30,14 @@ export default function CausalAuditView({ onNavigateUplift }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px' }}>
         <div className="spinner" style={{ width: '40px', height: '40px' }}></div>
-        <div style={{ color: '#94a3b8', fontSize: '1.1rem' }}>Computing Causal DAG & Propensity Overlap Models...</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Computing Causal DAG & Propensity Overlap Models...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="info-box" style={{ borderColor: '#f43f5e', background: 'rgba(244,63,94,0.1)', color: '#fb7185' }}>
+      <div className="info-box" style={{ borderColor: '#e8c1c5', background: 'var(--accent-rose-light)', color: '#a33f49' }}>
         <AlertTriangle size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
         Error loading audit: {error}
         <button className="btn btn-secondary" onClick={fetchAudit} style={{ marginLeft: '16px' }}>Retry</button>
@@ -54,9 +54,9 @@ export default function CausalAuditView({ onNavigateUplift }) {
 
   const traces = [];
   const armColors = {
-    'received_0': '#6366f1',
-    'received_10': '#06b6d4',
-    'received_20': '#10b981',
+    'received_0': '#255496',
+    'received_10': '#087e8b',
+    'received_20': '#16805d',
   };
   const armLabels = {
     'received_0': 'Received $0 (Control)',
@@ -72,7 +72,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
         type: 'bar',
         name: armLabels[key] || key,
         opacity: 0.65,
-        marker: { color: armColors[key] || '#a5b4fc' },
+        marker: { color: armColors[key] || '#255496' },
       });
     });
   }
@@ -100,21 +100,21 @@ export default function CausalAuditView({ onNavigateUplift }) {
       <div className="kpi-grid">
         <div className="kpi-card">
           <span className="kpi-label">Covariate Balance</span>
-          <span className="kpi-value" style={{ color: '#34d399' }}>
+          <span className="kpi-value" style={{ color: 'var(--accent-emerald)' }}>
             {summary_metrics?.pct_balanced_smd_under_0_10}%
           </span>
           <span className="kpi-subtext">All covariates satisfy SMD &lt; 0.10</span>
         </div>
         <div className="kpi-card">
           <span className="kpi-label">Max Bias (Unweighted SMD)</span>
-          <span className="kpi-value" style={{ color: '#fbbf24' }}>
+          <span className="kpi-value" style={{ color: 'var(--accent-amber)' }}>
             {summary_metrics?.max_unweighted_smd}
           </span>
           <span className="kpi-subtext">Observed selection bias in campaign</span>
         </div>
         <div className="kpi-card">
           <span className="kpi-label">Residual Bias (Weighted SMD)</span>
-          <span className="kpi-value" style={{ color: '#34d399' }}>
+          <span className="kpi-value" style={{ color: 'var(--accent-emerald)' }}>
             {summary_metrics?.max_weighted_smd}
           </span>
           <span className="kpi-subtext">92.6% reduction in imbalance</span>
@@ -130,13 +130,13 @@ export default function CausalAuditView({ onNavigateUplift }) {
 
       {/* Estimand Info Banner */}
       <div className="info-box" style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <ShieldCheck size={22} style={{ color: '#818cf8', flexShrink: 0, marginTop: '2px' }} />
+        <ShieldCheck size={22} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
         <div>
-          <strong style={{ color: '#ffffff' }}>Backdoor Criterion Identification Guarantee:</strong>
+          <strong style={{ color: 'var(--text-main)' }}>Backdoor Criterion Identification Guarantee:</strong>
           <p style={{ marginTop: '4px', fontSize: '0.86rem' }}>
             Under conditional exchangeability $Y(d) \perp T \mid X$, the causal effect of discount amounts is non-parametrically identified by adjusting for the full backdoor adjustment set:
           </p>
-          <p style={{ marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: '#a5b4fc' }}>
+          <p style={{ marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--primary)' }}>
             {summary_metrics?.estimand_summary}
           </p>
         </div>
@@ -145,10 +145,10 @@ export default function CausalAuditView({ onNavigateUplift }) {
       {/* Causal DAG Interactive Diagram */}
       <div className="card">
         <div className="card-title">
-          <GitGraph size={20} color="#818cf8" />
+          <GitGraph size={20} color="var(--primary)" />
           <span>Causal Directed Acyclic Graph (DAG)</span>
         </div>
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
           Visual representation of the structural model: Confounders (X) bias observational assignment (T) and baseline purchase (Y). An unobserved confounder (U) is tested in sensitivity refutations.
         </p>
 
@@ -157,8 +157,8 @@ export default function CausalAuditView({ onNavigateUplift }) {
           <svg width="100%" height="100%" viewBox="0 0 900 380">
             <defs>
               <linearGradient id="grad-treat" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#4338ca" />
+                <stop offset="0%" stopColor="#255496" />
+                <stop offset="100%" stopColor="#1e447b" />
               </linearGradient>
               <linearGradient id="grad-outcome" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#10b981" />
@@ -169,10 +169,10 @@ export default function CausalAuditView({ onNavigateUplift }) {
                 <stop offset="100%" stopColor="#d97706" />
               </linearGradient>
               <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1 L 9 5 L 0 9 z" fill="rgba(255, 255, 255, 0.45)" />
+                <path d="M 0 1 L 9 5 L 0 9 z" fill="#aab6c5" />
               </marker>
               <marker id="arrow-causal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M 0 1 L 9 5 L 0 9 z" fill="#38bdf8" />
+                <path d="M 0 1 L 9 5 L 0 9 z" fill="#087e8b" />
               </marker>
             </defs>
 
@@ -190,7 +190,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
                 <path
                   d={`M 220 ${node.y} C 360 ${node.y}, 380 180, 480 180`}
                   fill="none"
-                  stroke="rgba(255, 255, 255, 0.18)"
+                  stroke="#c2ccd8"
                   strokeWidth="1.5"
                   markerEnd="url(#arrow)"
                 />
@@ -198,13 +198,13 @@ export default function CausalAuditView({ onNavigateUplift }) {
                 <path
                   d={`M 220 ${node.y} C 460 ${node.y}, 600 180, 720 180`}
                   fill="none"
-                  stroke="rgba(255, 255, 255, 0.18)"
+                  stroke="#c2ccd8"
                   strokeWidth="1.5"
                   markerEnd="url(#arrow)"
                 />
                 {/* Confounder Node */}
-                <rect x="30" y={node.y - 18} width="190" height="34" rx="8" fill="#1e293b" stroke="rgba(255,255,255,0.12)" />
-                <text x="125" y={node.y + 4} fill="#cbd5e1" fontSize="12" fontWeight="500" textAnchor="middle">
+                <rect x="30" y={node.y - 18} width="190" height="34" rx="8" fill="#f1f4f8" stroke="#dce3ec" />
+                <text x="125" y={node.y + 4} fill="#334155" fontSize="12" fontWeight="500" textAnchor="middle">
                   {node.name}
                 </text>
               </g>
@@ -236,7 +236,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
             <path
               d="M 540 190 L 710 190"
               fill="none"
-              stroke="#38bdf8"
+              stroke="#087e8b"
               strokeWidth="3.5"
               markerEnd="url(#arrow-causal)"
             />
@@ -246,7 +246,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
             </text>
 
             {/* Treatment Node */}
-            <rect x="420" y="160" width="120" height="60" rx="12" fill="url(#grad-treat)" filter="drop-shadow(0 4px 12px rgba(99,102,241,0.4))" />
+            <rect x="420" y="160" width="120" height="60" rx="12" fill="url(#grad-treat)" filter="drop-shadow(0 4px 12px rgba(37,84,150,0.2))" />
             <text x="480" y="188" fill="#ffffff" fontSize="14" fontWeight="700" textAnchor="middle">
               Discount (T)
             </text>
@@ -255,7 +255,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
             </text>
 
             {/* Outcome Node */}
-            <rect x="710" y="160" width="120" height="60" rx="12" fill="url(#grad-outcome)" filter="drop-shadow(0 4px 12px rgba(16,185,129,0.4))" />
+            <rect x="710" y="160" width="120" height="60" rx="12" fill="url(#grad-outcome)" filter="drop-shadow(0 4px 12px rgba(22,128,93,0.2))" />
             <text x="770" y="188" fill="#ffffff" fontSize="14" fontWeight="700" textAnchor="middle">
               Purchase (Y)
             </text>
@@ -270,18 +270,18 @@ export default function CausalAuditView({ onNavigateUplift }) {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div className="card-title" style={{ margin: 0 }}>
-            <Activity size={20} color="#06b6d4" />
+            <Activity size={20} color="var(--accent-cyan)" />
             <span>Propensity Score Positivity & Overlap Distributions</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Inspect Propensity for Arm:</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Inspect Propensity for Arm:</span>
             {['0', '10', '20'].map((arm) => (
               <button
                 key={arm}
                 onClick={() => setSelectedArm(arm)}
                 style={{
-                  background: selectedArm === arm ? '#6366f1' : 'rgba(255,255,255,0.06)',
-                  color: '#ffffff',
+                  background: selectedArm === arm ? 'var(--primary)' : '#ffffff',
+                  color: selectedArm === arm ? '#ffffff' : 'var(--text-muted)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '6px',
                   padding: '4px 12px',
@@ -296,29 +296,29 @@ export default function CausalAuditView({ onNavigateUplift }) {
           </div>
         </div>
 
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
           Positivity assumption check: Every customer type must have a non-zero probability of receiving any treatment arm. Overlapping distributions confirm common support across all three cohorts.
         </p>
 
-        <div style={{ background: 'rgba(10, 15, 29, 0.7)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-subtle)' }}>
           <Plot
             data={traces}
             layout={{
               barmode: 'overlay',
               paper_bgcolor: 'transparent',
               plot_bgcolor: 'transparent',
-              font: { color: '#94a3b8', family: 'Inter' },
+              font: { color: '#526174', family: 'Inter' },
               margin: { l: 40, r: 20, t: 30, b: 40 },
               height: 320,
               autosize: true,
               xaxis: {
                 title: { text: `Estimated Propensity P(T = $${selectedArm} | X)` },
-                gridcolor: 'rgba(255, 255, 255, 0.06)',
+                gridcolor: '#e1e7ef',
                 range: [0, 1],
               },
               yaxis: {
                 title: { text: 'Customer Frequency' },
-                gridcolor: 'rgba(255, 255, 255, 0.06)',
+                gridcolor: '#e1e7ef',
               },
               legend: {
                 orientation: 'h',
@@ -335,10 +335,10 @@ export default function CausalAuditView({ onNavigateUplift }) {
       {/* Covariate Balance Table */}
       <div className="card">
         <div className="card-title">
-          <Scale size={20} color="#10b981" />
+          <Scale size={20} color="var(--accent-emerald)" />
           <span>Covariate Balance Table: Standardized Mean Differences (SMD)</span>
         </div>
-        <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
           Standardized Mean Differences (SMD) evaluate balance before and after Inverse Propensity Weighting (IPW). The accepted clinical and econometrics gold standard is <strong>SMD &lt; 0.10</strong> (green badge).
         </p>
 
@@ -361,17 +361,17 @@ export default function CausalAuditView({ onNavigateUplift }) {
                 <tr key={idx}>
                   <td style={{ fontWeight: 600 }}>{row.covariate}</td>
                   <td>{row.smd_unweighted_10.toFixed(4)}</td>
-                  <td style={{ color: row.smd_weighted_10 < 0.1 ? '#34d399' : '#fb7185' }}>
+                  <td style={{ color: row.smd_weighted_10 < 0.1 ? '#14734f' : '#a33f49' }}>
                     {row.smd_weighted_10.toFixed(4)}
                   </td>
                   <td>{row.smd_unweighted_20.toFixed(4)}</td>
-                  <td style={{ color: row.smd_weighted_20 < 0.1 ? '#34d399' : '#fb7185' }}>
+                  <td style={{ color: row.smd_weighted_20 < 0.1 ? '#14734f' : '#a33f49' }}>
                     {row.smd_weighted_20.toFixed(4)}
                   </td>
-                  <td style={{ color: row.smd_unweighted_avg > 0.1 ? '#fbbf24' : '#cbd5e1' }}>
+                  <td style={{ color: row.smd_unweighted_avg > 0.1 ? '#8c560b' : 'var(--text-muted)' }}>
                     {row.smd_unweighted_avg.toFixed(4)}
                   </td>
-                  <td style={{ fontWeight: 700, color: '#34d399' }}>
+                  <td style={{ fontWeight: 700, color: '#14734f' }}>
                     {row.smd_weighted_avg.toFixed(4)}
                   </td>
                   <td>
