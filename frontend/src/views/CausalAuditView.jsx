@@ -66,16 +66,67 @@ export default function CausalAuditView({ onNavigateUplift }) {
 
   if (currentHist?.data_by_received_arm) {
     Object.entries(currentHist.data_by_received_arm).forEach(([key, counts]) => {
+      const total = counts.reduce((sum, count) => sum + count, 0);
       traces.push({
         x: binCenters,
-        y: counts,
+        y: counts.map((count) => total ? (count / total) * 100 : 0),
         type: 'bar',
         name: armLabels[key] || key,
-        opacity: 0.65,
-        marker: { color: armColors[key] || '#255496' },
+        opacity: 0.58,
+        marker: { color: armColors[key] || '#255496', line: { width: 0 } },
+        hovertemplate: 'Propensity: %{x:.2f}<br>Within-arm share: %{y:.1f}%<extra>%{fullData.name}</extra>',
       });
     });
   }
+
+  const balancePlotTraces = [
+    {
+      key: 'smd_unweighted_10',
+      name: 'Raw · $10 vs $0',
+      color: '#255496',
+      symbol: 'circle',
+      offset: -0.18,
+    },
+    {
+      key: 'smd_weighted_10',
+      name: 'IPW · $10 vs $0',
+      color: '#255496',
+      symbol: 'diamond',
+      offset: -0.06,
+    },
+    {
+      key: 'smd_unweighted_20',
+      name: 'Raw · $20 vs $0',
+      color: '#b06a12',
+      symbol: 'circle',
+      offset: 0.06,
+    },
+    {
+      key: 'smd_weighted_20',
+      name: 'IPW · $20 vs $0',
+      color: '#b06a12',
+      symbol: 'diamond',
+      offset: 0.18,
+    },
+  ].map((series) => ({
+    type: 'scatter',
+    mode: 'markers',
+    name: series.name,
+    x: (balance_table || []).map((row) => row[series.key]),
+    y: (balance_table || []).map((_, index) => balance_table.length - index - 1 + series.offset),
+    marker: { color: series.color, symbol: series.symbol, size: 9 },
+    customdata: (balance_table || []).map((row) => row.covariate),
+    hovertemplate: '%{customdata}<br>Absolute SMD: %{x:.3f}<extra>%{fullData.name}</extra>',
+  }));
+  const maxSmd = Math.max(
+    0.2,
+    ...(balance_table || []).flatMap((row) => [
+      row.smd_unweighted_10,
+      row.smd_weighted_10,
+      row.smd_unweighted_20,
+      row.smd_weighted_20,
+    ])
+  );
 
   return (
     <div>
@@ -300,30 +351,35 @@ export default function CausalAuditView({ onNavigateUplift }) {
           Positivity assumption check: Every customer type must have a non-zero probability of receiving any treatment arm. Overlapping distributions confirm common support across all three cohorts.
         </p>
 
-        <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-subtle)' }}>
+        <div className="analysis-chart">
           <Plot
             data={traces}
             layout={{
               barmode: 'overlay',
               paper_bgcolor: 'transparent',
               plot_bgcolor: 'transparent',
-              font: { color: '#526174', family: 'Inter' },
-              margin: { l: 40, r: 20, t: 30, b: 40 },
-              height: 320,
+              font: { color: '#526174', family: 'Inter, sans-serif', size: 12 },
+              margin: { l: 58, r: 20, t: 42, b: 66 },
+              height: 360,
               autosize: true,
+              bargap: 0.08,
               xaxis: {
-                title: { text: `Estimated Propensity P(T = $${selectedArm} | X)` },
+                title: { text: `Estimated propensity P(T = $${selectedArm} | X)`, standoff: 12 },
                 gridcolor: '#e1e7ef',
                 range: [0, 1],
+                zeroline: false,
               },
               yaxis: {
-                title: { text: 'Customer Frequency' },
+                title: { text: 'Share within received arm (%)', standoff: 10 },
                 gridcolor: '#e1e7ef',
+                rangemode: 'tozero',
+                zeroline: false,
               },
               legend: {
                 orientation: 'h',
-                y: 1.15,
-                x: 0.1,
+                y: 1.16,
+                x: 0,
+                yanchor: 'bottom',
               },
             }}
             config={{ responsive: true, displayModeBar: false }}
@@ -341,6 +397,56 @@ export default function CausalAuditView({ onNavigateUplift }) {
         <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
           Standardized Mean Differences (SMD) evaluate balance before and after Inverse Propensity Weighting (IPW). The accepted clinical and econometrics gold standard is <strong>SMD &lt; 0.10</strong> (green badge).
         </p>
+
+        <div className="analysis-chart balance-chart">
+          <Plot
+            data={balancePlotTraces}
+            layout={{
+              paper_bgcolor: 'transparent',
+              plot_bgcolor: 'transparent',
+              font: { color: '#526174', family: 'Inter, sans-serif', size: 12 },
+              margin: { l: 180, r: 24, t: 40, b: 48 },
+              height: Math.max(320, (balance_table?.length || 0) * 46 + 100),
+              autosize: true,
+              xaxis: {
+                title: { text: 'Absolute standardized mean difference', standoff: 10 },
+                range: [0, maxSmd * 1.1],
+                gridcolor: '#e1e7ef',
+                zeroline: false,
+              },
+              yaxis: {
+                tickmode: 'array',
+                tickvals: (balance_table || []).map((_, index) => balance_table.length - index - 1),
+                ticktext: (balance_table || []).map((row) => row.covariate),
+                gridcolor: '#f0f3f7',
+                zeroline: false,
+              },
+              shapes: [{
+                type: 'line',
+                x0: 0.1,
+                x1: 0.1,
+                y0: 0,
+                y1: 1,
+                xref: 'x',
+                yref: 'paper',
+                line: { color: '#b54752', width: 2, dash: 'dash' },
+              }],
+              annotations: [{
+                x: 0.1,
+                y: 1.04,
+                xref: 'x',
+                yref: 'paper',
+                text: 'Balance threshold (0.10)',
+                showarrow: false,
+                xanchor: 'left',
+                font: { color: '#a33f49', size: 11 },
+              }],
+              legend: { orientation: 'h', y: 1.18, x: 0, yanchor: 'bottom' },
+            }}
+            config={{ responsive: true, displayModeBar: false }}
+            style={{ width: '100%' }}
+          />
+        </div>
 
         <div className="table-wrapper">
           <table className="data-table">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Plot from 'react-plotly.js';
 import { Download, DollarSign, LoaderCircle, Sliders, Target, TrendingUp } from 'lucide-react';
 import { runPrescription } from '../api';
 
@@ -49,6 +50,18 @@ export default function PrescriptionView() {
       setLoading(false);
     }
   };
+
+  const allocationByDiscount = (result?.recommendations || []).reduce((groups, recommendation) => {
+    const discount = Number(recommendation.discount);
+    const group = groups.get(discount) || { customers: 0, profit: 0, spend: 0 };
+    group.customers += 1;
+    group.profit += Number(recommendation.expected_incremental_profit) || 0;
+    group.spend += Number(recommendation.expected_spend) || 0;
+    groups.set(discount, group);
+    return groups;
+  }, new Map());
+  const discountLevels = [...allocationByDiscount.keys()].sort((a, b) => a - b);
+  const discountLabels = discountLevels.map((discount) => `$${discount}`);
 
   return (
     <div>
@@ -129,6 +142,83 @@ export default function PrescriptionView() {
                 Export plan
               </button>
             </div>
+
+            {discountLevels.length > 0 && (
+              <div className="prescription-analysis-grid">
+                <section className="analysis-panel">
+                  <div className="analysis-panel-heading">
+                    <div>
+                      <h3>Customers by discount</h3>
+                      <p>Recommended allocation across promotion levels</p>
+                    </div>
+                  </div>
+                  <div className="analysis-chart">
+                    <Plot
+                      data={[{
+                        type: 'bar',
+                        x: discountLabels,
+                        y: discountLevels.map((discount) => allocationByDiscount.get(discount).customers),
+                        marker: { color: '#255496' },
+                        customdata: discountLevels.map((discount) => [
+                          allocationByDiscount.get(discount).spend,
+                          allocationByDiscount.get(discount).profit,
+                        ]),
+                        hovertemplate: '%{x}<br>Customers: %{y:,}<br>Expected spend: $%{customdata[0]:,.2f}<br>Expected profit: $%{customdata[1]:,.2f}<extra></extra>',
+                      }]}
+                      layout={{
+                        paper_bgcolor: 'transparent',
+                        plot_bgcolor: 'transparent',
+                        font: { color: '#526174', family: 'Inter, sans-serif', size: 12 },
+                        margin: { l: 52, r: 16, t: 20, b: 48 },
+                        height: 280,
+                        autosize: true,
+                        xaxis: { type: 'category', categoryorder: 'array', categoryarray: discountLabels, title: { text: 'Discount level', standoff: 10 }, zeroline: false },
+                        yaxis: { title: { text: 'Customers', standoff: 8 }, gridcolor: '#e1e7ef', rangemode: 'tozero', zeroline: false, dtick: 1 },
+                        bargap: 0.42,
+                      }}
+                      config={{ responsive: true, displayModeBar: false }}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </section>
+                <section className="analysis-panel">
+                  <div className="analysis-panel-heading">
+                    <div>
+                      <h3>Incremental profit by discount</h3>
+                      <p>Modeled contribution from selected recommendations</p>
+                    </div>
+                  </div>
+                  <div className="analysis-chart">
+                    <Plot
+                      data={[{
+                        type: 'bar',
+                        x: discountLabels,
+                        y: discountLevels.map((discount) => allocationByDiscount.get(discount).profit),
+                        marker: { color: '#16805d' },
+                        customdata: discountLevels.map((discount) => [
+                          allocationByDiscount.get(discount).customers,
+                          allocationByDiscount.get(discount).spend,
+                        ]),
+                        hovertemplate: '%{x}<br>Expected profit: $%{y:,.2f}<br>Customers: %{customdata[0]:,}<br>Expected spend: $%{customdata[1]:,.2f}<extra></extra>',
+                      }]}
+                      layout={{
+                        paper_bgcolor: 'transparent',
+                        plot_bgcolor: 'transparent',
+                        font: { color: '#526174', family: 'Inter, sans-serif', size: 12 },
+                        margin: { l: 64, r: 16, t: 20, b: 48 },
+                        height: 280,
+                        autosize: true,
+                        xaxis: { type: 'category', categoryorder: 'array', categoryarray: discountLabels, title: { text: 'Discount level', standoff: 10 }, zeroline: false },
+                        yaxis: { title: { text: 'Expected profit ($)', standoff: 8 }, gridcolor: '#e1e7ef', rangemode: 'tozero', zeroline: false, tickprefix: '$', separatethousands: true },
+                        bargap: 0.42,
+                      }}
+                      config={{ responsive: true, displayModeBar: false }}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </section>
+              </div>
+            )}
 
             <div className="prescription-table-wrap">
               <table className="prescription-table">
