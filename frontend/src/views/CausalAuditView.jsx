@@ -37,7 +37,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
 
   if (error) {
     return (
-      <div className="info-box" style={{ borderColor: '#e8c1c5', background: 'var(--accent-rose-light)', color: '#a33f49' }}>
+      <div className="info-box error-box">
         <AlertTriangle size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
         Error loading audit: {error}
         <button className="btn btn-secondary" onClick={fetchAudit} style={{ marginLeft: '16px' }}>Retry</button>
@@ -137,7 +137,7 @@ export default function CausalAuditView({ onNavigateUplift }) {
             Structural DAG identification, overlap diagnostics, and covariate balance before & after IPW
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="page-actions">
           <button className="btn btn-secondary" onClick={fetchAudit}>
             <RefreshCw size={16} /> Refresh Audit
           </button>
@@ -319,27 +319,19 @@ export default function CausalAuditView({ onNavigateUplift }) {
 
       {/* Propensity Positivity / Overlap Diagnostics */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="chart-filter-bar">
           <div className="card-title" style={{ margin: 0 }}>
             <Activity size={20} color="var(--accent-cyan)" />
             <span>Propensity Score Positivity & Overlap Distributions</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Inspect Propensity for Arm:</span>
+          <div className="chart-filter-options" role="group" aria-label="Select discount arm for propensity overlap chart">
+            <span className="chart-filter-label">Propensity for:</span>
             {['0', '10', '20'].map((arm) => (
               <button
                 key={arm}
                 onClick={() => setSelectedArm(arm)}
-                style={{
-                  background: selectedArm === arm ? 'var(--primary)' : '#ffffff',
-                  color: selectedArm === arm ? '#ffffff' : 'var(--text-muted)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  padding: '4px 12px',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: selectedArm === arm ? 600 : 400,
-                }}
+                className={`arm-filter ${selectedArm === arm ? 'active' : ''}`}
+                aria-pressed={selectedArm === arm}
               >
                 ${arm} Discount
               </button>

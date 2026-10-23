@@ -326,7 +326,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
             <label className="form-label">
               Observed Confounders for Backdoor Adjustment ({confounders.length} selected):
             </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+            <div className="confounder-list">
               {columns
                 .filter((col) => col !== treatment && col !== outcome && col !== 'customer_id')
                 .map((col) => {
@@ -336,18 +336,10 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                       type="button"
                       key={col}
                       onClick={() => toggleConfounder(col)}
-                      style={{
-                        background: isSelected ? 'var(--primary-light)' : '#ffffff',
-                        border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-                        color: isSelected ? 'var(--primary)' : 'var(--text-muted)',
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.84rem',
-                        transition: 'all 0.15s ease',
-                      }}
+                      className={`confounder-chip ${isSelected ? 'selected' : ''}`}
+                      aria-pressed={isSelected}
                     >
-                      {isSelected ? '✓ ' : '+ '}
+                      <span aria-hidden="true">{isSelected ? '✓' : '+'}</span>
                       {col}
                     </button>
                   );
@@ -355,7 +347,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+          <div className="page-actions">
             <button type="submit" className="btn btn-primary" disabled={savingConfig}>
               {savingConfig ? 'Saving...' : 'Save Configuration & Update DAG'}
             </button>

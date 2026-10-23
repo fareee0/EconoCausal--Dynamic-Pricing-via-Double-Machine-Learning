@@ -90,12 +90,7 @@ export default function PrescriptionView() {
         </p>
 
         {error && (
-          <div className="info-box" role="alert" style={{
-            borderColor: '#f43f5e',
-            background: 'rgba(244,63,94,0.1)',
-            color: '#fda4af',
-            marginBottom: '16px',
-          }}>
+          <div className="info-box error-box" role="alert" style={{ marginBottom: '16px' }}>
             {error}
           </div>
         )}
