@@ -50,3 +50,13 @@ class DataSummaryResponse(BaseModel):
     preview: List[Dict[str, Any]]
     column_mapping: ColumnMapping
     budget_config: BudgetConfig
+
+
+class UpliftSummaryResponse(BaseModel):
+    status: str
+    observations: int
+    available_ground_truth: bool
+    summary_metrics: Dict[str, float]
+    by_segment: List[Dict[str, Any]]
+    qini_curve: List[Dict[str, Any]]
+    estimation_note: str

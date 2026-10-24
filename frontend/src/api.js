@@ -39,6 +39,11 @@ export const getCausalAudit = async () => {
   return res.data;
 };
 
+export const getUpliftSummary = async () => {
+  const res = await api.get('/uplift');
+  return res.data;
+};
+
 export const runPrescription = async () => {
   const res = await api.post('/prescription');
   return res.data;

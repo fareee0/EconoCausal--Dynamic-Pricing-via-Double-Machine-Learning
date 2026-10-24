@@ -156,6 +156,19 @@ def test_fastapi_endpoints():
     assert audit["summary_metrics"]["pct_balanced_smd_under_0_10"] >= 80.0
 
 
+def test_uplift_endpoint_returns_summary():
+    client = TestClient(app)
+    response = client.get("/uplift")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["observations"] > 0
+    assert "summary_metrics" in payload
+    assert "by_segment" in payload
+    assert "qini_curve" in payload
+
+
 def test_prescription_allocates_within_budget(dataset_fixture, monkeypatch):
     df_obs, _ = dataset_fixture
     monkeypatch.setitem(STATE, "df", df_obs)

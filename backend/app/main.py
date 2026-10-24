@@ -30,6 +30,7 @@ from backend.app.schemas import (
     BudgetConfig,
     ColumnMapping,
     DataSummaryResponse,
+    UpliftSummaryResponse,
 )
 from backend.causal.graph import get_dag_json, identify_causal_effect
 from backend.causal.propensity import PropensityAuditor, trim_extreme_propensities
@@ -58,6 +59,19 @@ def load_default_dataset() -> pd.DataFrame:
     from backend.data.generate import generate_retail_dataset
     df_obs, _ = generate_retail_dataset(n_samples=20_000)
     return df_obs
+
+
+def load_ground_truth_dataset() -> Optional[pd.DataFrame]:
+    """Load ground-truth uplift labels when they are available for validation."""
+    paths = [
+        Path("backend/data/ground_truth.csv"),
+        Path("data/ground_truth.csv"),
+        Path("../data/ground_truth.csv"),
+    ]
+    for p in paths:
+        if p.exists():
+            return pd.read_csv(p)
+    return None
 
 
 @asynccontextmanager
@@ -258,6 +272,159 @@ def get_causal_audit():
 
     STATE["audit_cache"] = response_data
     return response_data
+
+
+@app.get("/uplift", response_model=UpliftSummaryResponse)
+def get_uplift_summary():
+    """Estimate heterogeneous treatment effects and summarize uplift by segment."""
+    if STATE["df"] is None:
+        STATE["df"] = load_default_dataset()
+
+    df: pd.DataFrame = STATE["df"]
+    mapping: ColumnMapping = STATE["column_mapping"]
+    required_columns = [mapping.treatment, mapping.outcome, *mapping.confounders]
+    missing_columns = sorted(set(required_columns) - set(df.columns))
+    if missing_columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Uplift model columns are missing from the dataset: {', '.join(missing_columns)}",
+        )
+
+    if not mapping.confounders:
+        raise HTTPException(status_code=400, detail="Select at least one confounder before fitting uplift models.")
+
+    treatment = pd.to_numeric(df[mapping.treatment], errors="coerce")
+    outcome = pd.to_numeric(df[mapping.outcome], errors="coerce")
+    valid_mask = treatment.notna() & outcome.isin([0, 1])
+    valid_indices = np.flatnonzero(valid_mask.to_numpy())
+    if len(valid_indices) == 0:
+        raise HTTPException(status_code=400, detail="No rows are valid for uplift estimation.")
+
+    feature_frame = df.loc[valid_mask, mapping.confounders]
+    response_probabilities = {}
+    arms = sorted({0.0, *[float(value) for value in STATE["budget_config"].discount_options]})
+    for arm in arms:
+        if arm not in treatment[valid_mask].unique():
+            continue
+        arm_mask = valid_mask & (treatment == arm)
+        arm_outcomes = outcome.loc[arm_mask].astype(int)
+        if arm_outcomes.nunique() != 2:
+            continue
+
+        numeric_columns = [
+            column for column in mapping.confounders if pd.api.types.is_numeric_dtype(feature_frame[column])
+        ]
+        categorical_columns = [column for column in mapping.confounders if column not in numeric_columns]
+        transformers = []
+        if numeric_columns:
+            transformers.append((
+                "numeric",
+                make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
+                numeric_columns,
+            ))
+        if categorical_columns:
+            transformers.append((
+                "categorical",
+                make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder(handle_unknown="ignore")),
+                categorical_columns,
+            ))
+        preprocessor = ColumnTransformer(transformers)
+        estimator = make_pipeline(preprocessor, LogisticRegression(max_iter=500))
+        estimator.fit(feature_frame.loc[arm_mask], arm_outcomes)
+        response_probabilities[arm] = estimator.predict_proba(df.loc[:, mapping.confounders])[:, 1]
+
+    if 0.0 not in response_probabilities:
+        raise HTTPException(status_code=400, detail="The control arm is required to estimate uplift.")
+
+    control_prob = response_probabilities[0.0]
+    uplift_10 = response_probabilities.get(10.0, control_prob) - control_prob
+    uplift_20 = response_probabilities.get(20.0, control_prob) - control_prob
+
+    combined = df.copy()
+    combined["estimated_uplift_10"] = uplift_10
+    combined["estimated_uplift_20"] = uplift_20
+
+    summary_metrics = {
+        "estimated_avg_uplift_10": round(float(np.mean(uplift_10)), 4),
+        "estimated_avg_uplift_20": round(float(np.mean(uplift_20)), 4),
+        "max_estimated_uplift_10": round(float(np.max(uplift_10)), 4),
+        "max_estimated_uplift_20": round(float(np.max(uplift_20)), 4),
+    }
+
+    ground_truth = load_ground_truth_dataset()
+    available_ground_truth = ground_truth is not None and not ground_truth.empty
+    by_segment = []
+    qini_curve = []
+
+    if available_ground_truth and {"customer_id", "segment", "tau_10_true", "tau_20_true"}.issubset(ground_truth.columns):
+        combined = combined.merge(
+            ground_truth[["customer_id", "segment", "tau_10_true", "tau_20_true"]],
+            on="customer_id",
+            how="left",
+        )
+        for arm, true_col in [(10, "tau_10_true"), (20, "tau_20_true")]:
+            estimate_col = f"estimated_uplift_{arm}"
+            valid_truth = combined[true_col].notna()
+            if valid_truth.any():
+                true_values = combined.loc[valid_truth, true_col].to_numpy(dtype=float)
+                est_values = combined.loc[valid_truth, estimate_col].to_numpy(dtype=float)
+                summary_metrics[f"rmse_{arm}"] = round(float(np.sqrt(np.mean((est_values - true_values) ** 2))), 4)
+                summary_metrics[f"mae_{arm}"] = round(float(np.mean(np.abs(est_values - true_values))), 4)
+
+        for segment_name, group in combined.groupby("segment", sort=True):
+            if group.empty:
+                continue
+            by_segment.append({
+                "segment": segment_name,
+                "customers": int(len(group)),
+                "avg_true_uplift_10": round(float(group["tau_10_true"].mean()), 4) if group["tau_10_true"].notna().any() else None,
+                "avg_estimated_uplift_10": round(float(group["estimated_uplift_10"].mean()), 4),
+                "avg_true_uplift_20": round(float(group["tau_20_true"].mean()), 4) if group["tau_20_true"].notna().any() else None,
+                "avg_estimated_uplift_20": round(float(group["estimated_uplift_20"].mean()), 4),
+            })
+
+        for arm in (10, 20):
+            true_col = f"tau_{arm}_true"
+            estimate_col = f"estimated_uplift_{arm}"
+            valid_truth = combined[true_col].notna()
+            if not valid_truth.any():
+                continue
+            ranked = combined.loc[valid_truth, [estimate_col, true_col]].copy()
+            ranked = ranked.sort_values(by=estimate_col, ascending=False)
+            cumulative_true = ranked[true_col].cumsum()
+            step_values = []
+            for p in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+                idx = max(1, int(np.ceil(len(ranked) * p)))
+                step_values.append({
+                    "fraction_targeted": round(float(p), 4),
+                    "cumulative_true_uplift": round(float(cumulative_true.iloc[idx - 1]), 4),
+                })
+            qini_curve.append({"discount": arm, "curve": step_values})
+
+    elif "segment" in df.columns:
+        for segment_name, group in df.groupby("segment", sort=True):
+            by_segment.append({
+                "segment": segment_name,
+                "customers": int(len(group)),
+                "avg_true_uplift_10": None,
+                "avg_estimated_uplift_10": round(float(group["estimated_uplift_10"].mean()), 4),
+                "avg_true_uplift_20": None,
+                "avg_estimated_uplift_20": round(float(group["estimated_uplift_20"].mean()), 4),
+            })
+
+    return {
+        "status": "ready",
+        "observations": int(len(df)),
+        "available_ground_truth": available_ground_truth,
+        "summary_metrics": summary_metrics,
+        "by_segment": by_segment,
+        "qini_curve": qini_curve,
+        "estimation_note": (
+            "Estimated uplift is derived from separate response models by treatment arm. "
+            "When ground-truth uplift labels are available, the summary compares the model's estimated "
+            "ITE to the synthetic truth, but it remains a benchmark rather than a validated causal estimate."
+        ),
+    }
 
 
 @app.post("/prescription")
