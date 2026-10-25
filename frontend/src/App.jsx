@@ -6,11 +6,18 @@ import UpliftView from './views/UpliftView';
 import PrescriptionView from './views/PrescriptionView';
 import { getDataSummary } from './api';
 
+const viewLabels = {
+  data_budget: 'Data & Budget',
+  causal_audit: 'Causal Audit',
+  uplift: 'Uplift & DML',
+  prescription: 'Prescription',
+};
+
 export default function App() {
   const [activeView, setActiveView] = useState('data_budget');
   const [dataSummary, setDataSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
 
   const fetchSummary = async () => {
     try {
@@ -38,10 +45,24 @@ export default function App() {
         isConnected={isConnected}
       />
       <main className="main-content">
+        <div className="workspace-bar">
+          <div className="workspace-context">
+            <span className="workspace-eyebrow">CAMPAIGN INTELLIGENCE</span>
+            <span className="workspace-divider" aria-hidden="true">/</span>
+            <span className="workspace-current">{viewLabels[activeView]}</span>
+          </div>
+          <div className={`engine-status ${isConnected ? 'online' : 'offline'}`}>
+            <span className="status-dot" aria-hidden="true"></span>
+            {isConnected ? 'Engine connected' : 'Engine offline'}
+          </div>
+        </div>
         {loading && !dataSummary ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '16px' }}>
-            <div className="spinner" style={{ width: '40px', height: '40px' }}></div>
-            <div style={{ color: 'var(--text-muted)' }}>Connecting to EconoCausal Engine...</div>
+          <div className="loading-state">
+            <div className="spinner"></div>
+            <div className="loading-copy">
+              <strong>Preparing your workspace</strong>
+              <span>Connecting to the EconoCausal engine…</span>
+            </div>
           </div>
         ) : (
           <>

@@ -1,64 +1,55 @@
 import React from 'react';
-import { Database, GitGraph, TrendingUp, Sliders, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Activity, Database, GitGraph, TrendingUp, SlidersHorizontal, ShieldCheck } from 'lucide-react';
 
 export default function Sidebar({ activeView, setActiveView, isConnected = true }) {
   const navItems = [
-    { id: 'data_budget', label: 'Data & Budget', icon: Database, badge: null },
-    { id: 'causal_audit', label: 'Causal Audit', icon: GitGraph, badge: 'Phase 1' },
-    { id: 'uplift', label: 'Uplift & DML', icon: TrendingUp, badge: 'Phase 2' },
-    { id: 'prescription', label: 'Prescription', icon: Sliders, badge: 'Phase 3' },
+    { id: 'data_budget', label: 'Data & Budget', icon: Database, badge: '01' },
+    { id: 'causal_audit', label: 'Causal Audit', icon: GitGraph, badge: '02' },
+    { id: 'uplift', label: 'Uplift & DML', icon: TrendingUp, badge: '03' },
+    { id: 'prescription', label: 'Prescription', icon: SlidersHorizontal, badge: '04' },
   ];
 
   return (
     <aside className="sidebar">
       <div className="brand-header">
-        <div className="brand-icon">⚡</div>
+        <div className="brand-icon"><Activity size={21} strokeWidth={2.4} /></div>
         <div>
           <div className="brand-title">EconoCausal</div>
-          <div style={{ display: 'flex', alignItems: 'center', marginTop: '2px' }}>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Double ML Optimizer</span>
-            <span className="brand-badge">v1.0</span>
-          </div>
+          <div className="brand-caption">CAUSAL PRICING STUDIO</div>
         </div>
       </div>
 
-      <ul className="nav-menu">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeView === item.id;
-          return (
-            <li key={item.id}>
-              <button
-                className={`nav-item-btn ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveView(item.id)}
-              >
-                <span className="nav-icon"><Icon size={18} /></span>
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.badge && (
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    background: isActive ? 'var(--primary-light)' : '#f1f4f8',
-                    color: isActive ? 'var(--primary)' : 'var(--text-dim)'
-                  }}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <nav className="primary-nav" aria-label="Main navigation">
+        <div className="nav-section-label">WORKSPACE</div>
+        <ul className="nav-menu">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeView === item.id;
+            return (
+              <li key={item.id}>
+                <button
+                  className={`nav-item-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => setActiveView(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <span className="nav-icon"><Icon size={18} strokeWidth={1.9} /></span>
+                  <span className="nav-item-label">{item.label}</span>
+                  <span className="nav-item-number">{item.badge}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
       <div className="sidebar-footer">
-        <div className="system-status">
-          <div className="status-dot" style={{ background: isConnected ? '#10b981' : '#f43f5e' }}></div>
-          <span>{isConnected ? 'FastAPI Backend Online' : 'Backend Connecting...'}</span>
+        <div className={`sidebar-system-status ${isConnected ? 'online' : 'offline'}`}>
+          <span className="status-dot" aria-hidden="true"></span>
+          <span>{isConnected ? 'Backend online' : 'Backend offline'}</span>
         </div>
-        <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <ShieldCheck size={14} color="var(--primary)" />
-          <span>Unconfoundedness Verified</span>
+        <div className="sidebar-assurance">
+          <ShieldCheck size={15} />
+          <span>Built for causal decisions</span>
         </div>
       </div>
     </aside>
