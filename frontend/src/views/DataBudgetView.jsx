@@ -20,7 +20,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
   // Form states initialized from dataSummary
   const [treatment, setTreatment] = useState(dataSummary?.column_mapping?.treatment || 'discount_amount');
   const [outcome, setOutcome] = useState(dataSummary?.column_mapping?.outcome || 'purchased');
-  const [revenue] = useState(dataSummary?.column_mapping?.revenue || 'revenue');
+  const [revenue, setRevenue] = useState(dataSummary?.column_mapping?.revenue || '');
   const [confounders, setConfounders] = useState(dataSummary?.column_mapping?.confounders || []);
 
   const [budget, setBudget] = useState(dataSummary?.budget_config?.total_budget || 5000);
@@ -52,6 +52,10 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       setSuccessMsg('');
       const updatedSummary = await uploadDataset(file);
       onDataRefresh(updatedSummary);
+      setTreatment(updatedSummary.column_mapping.treatment);
+      setOutcome(updatedSummary.column_mapping.outcome);
+      setRevenue(updatedSummary.column_mapping.revenue || '');
+      setConfounders(updatedSummary.column_mapping.confounders);
       setPreviewSearch('');
       setSortColumn('');
       setSortDirection('asc');
@@ -136,6 +140,12 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
 
   const columns = dataSummary?.columns || EMPTY_ARRAY;
   const preview = dataSummary?.preview || EMPTY_ARRAY;
+  const campaignMappingReady = Boolean(
+    dataSummary?.column_mapping?.treatment
+    && dataSummary?.column_mapping?.outcome
+    && columns.includes(dataSummary.column_mapping.treatment)
+    && columns.includes(dataSummary.column_mapping.outcome)
+  );
   const filteredPreview = useMemo(() => {
     const query = previewSearch.trim().toLocaleLowerCase();
     const filtered = query
@@ -186,7 +196,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
         <div className="kpi-card">
           <span className="kpi-label">Active Dataset</span>
           <span className="kpi-value" style={{ fontSize: '1.25rem' }}>{dataSummary?.filename || 'retail_campaign.csv'}</span>
-          <span className="kpi-subtext">Known structural ground truth available</span>
+          <span className="kpi-subtext">Current uploaded customer dataset</span>
         </div>
         <div className="kpi-card">
           <span className="kpi-label">Total Observations</span>
@@ -238,15 +248,24 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
           <span>Causal Variable Mapping & Economic Parameters</span>
         </div>
 
+        {!campaignMappingReady && (
+          <div className="info-box" role="status">
+            This file does not appear to contain mapped campaign treatment and purchase-outcome columns.
+            Churn prediction can still run from a churn label; causal audit, uplift, and promotion
+            recommendations need valid campaign treatment and binary outcome data.
+          </div>
+        )}
+
         <form onSubmit={handleSaveConfiguration}>
           <div className="form-grid" style={{ marginBottom: '24px' }}>
             <div className="form-group">
-              <label className="form-label">Treatment Column (T)</label>
+              <label className="form-label">Treatment Column (T, campaign data only)</label>
               <select
                 className="form-select"
                 value={treatment}
                 onChange={(e) => setTreatment(e.target.value)}
               >
+                <option value="">Select a treatment column</option>
                 {columns.map((col) => (
                   <option key={col} value={col}>
                     {col}
@@ -254,17 +273,18 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                 ))}
               </select>
               <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
-                Discrete discount levels (e.g. 0, 10, 20)
+                Optional for churn-only datasets; required for causal campaign analysis.
               </span>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Outcome Column (Y)</label>
+              <label className="form-label">Purchase / Conversion Outcome (Y)</label>
               <select
                 className="form-select"
                 value={outcome}
                 onChange={(e) => setOutcome(e.target.value)}
               >
+                <option value="">Select an outcome column</option>
                 {columns.map((col) => (
                   <option key={col} value={col}>
                     {col}
@@ -272,7 +292,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
                 ))}
               </select>
               <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>
-                Primary binary purchase decision (0 or 1)
+                Optional for churn-only datasets; use a binary 0/1 purchase or conversion field for campaign analysis.
               </span>
             </div>
 
@@ -328,7 +348,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
             </label>
             <div className="confounder-list">
               {columns
-                .filter((col) => col !== treatment && col !== outcome && col !== 'customer_id')
+                .filter((col) => col !== treatment && col !== outcome && col !== revenue && !['customer_id', 'id', 'row_id'].includes(col.toLowerCase()))
                 .map((col) => {
                   const isSelected = confounders.includes(col);
                   return (

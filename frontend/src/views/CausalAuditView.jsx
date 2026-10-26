@@ -3,7 +3,7 @@ import Plot from 'react-plotly.js';
 import { GitGraph, ShieldCheck, CheckCircle2, AlertTriangle, Scale, Activity, RefreshCw } from 'lucide-react';
 import { getCausalAudit } from '../api';
 
-export default function CausalAuditView({ onNavigateUplift }) {
+export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
   const [auditData, setAuditData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,11 +36,20 @@ export default function CausalAuditView({ onNavigateUplift }) {
   }
 
   if (error) {
+    const campaignDataMissing = error.includes('does not have mapped treatment and purchase-outcome columns');
     return (
       <div className="info-box error-box">
         <AlertTriangle size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} />
-        Error loading audit: {error}
-        <button className="btn btn-secondary" onClick={fetchAudit} style={{ marginLeft: '16px' }}>Retry</button>
+        {campaignDataMissing
+          ? 'Causal audit needs a campaign treatment column and a binary purchase/conversion outcome. This customer file can still be used for churn prediction.'
+          : `Error loading audit: ${error}`}
+        {campaignDataMissing ? (
+          <button className="btn btn-secondary" onClick={onNavigateData} style={{ marginLeft: '16px' }}>
+            Review dataset mapping
+          </button>
+        ) : (
+          <button className="btn btn-secondary" onClick={fetchAudit} style={{ marginLeft: '16px' }}>Retry</button>
+        )}
       </div>
     );
   }

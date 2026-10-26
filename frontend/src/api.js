@@ -44,6 +44,14 @@ export const getUpliftSummary = async () => {
   return res.data;
 };
 
+export const getChurnPredictions = async (target, positiveValue) => {
+  const params = {};
+  if (target) params.target = target;
+  if (positiveValue) params.positive_value = positiveValue;
+  const res = await api.get('/churn', { params });
+  return res.data;
+};
+
 export const runPrescription = async () => {
   const res = await api.post('/prescription');
   return res.data;

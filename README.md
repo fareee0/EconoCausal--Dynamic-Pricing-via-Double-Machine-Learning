@@ -73,6 +73,17 @@ Generated via `backend/data/generate.py` ($N = 20,000$ customers) from a structu
 5. **Data Files**:
    - `backend/data/retail_campaign.csv`: Observed data ($N = 20,000$) for model training.
    - `backend/data/ground_truth.csv`: Latent segments and true ITEs, used **only for evaluation and validation**.
+   - `backend/data/retail_churn_campaign.csv`: Upload-ready, reproducible 25,000-customer demo with explicit churn labels and all three campaign treatment arms.
+
+### Try the full ML workflow with the large sample CSV
+
+Upload `backend/data/retail_churn_campaign.csv` in **Data & Budget**. It contains `discount_amount` (treatment), `purchased` (binary outcome), and `churn` (binary label), so the same file supports churn scoring, causal audit, uplift, and prescription. The sample uses synthetic customer IDs that do not match the benchmark ground-truth file.
+
+Regenerate the sample at any time with:
+
+```bash
+python -m backend.data.generate_churn_campaign
+```
 
 ---
 
@@ -90,13 +101,21 @@ Generated via `backend/data/generate.py` ($N = 20,000$ customers) from a structu
    - **Balance Result**: **100% of covariates achieved Standardized Mean Difference (SMD) < 0.10** after weighting (max unweighted SMD was $0.4891$, reduced to $0.0362$).
    - Extreme propensity trimming: 4 out of 20,000 units trimmed (< 0.02%).
 3. **Frontend Dashboard (`frontend/`)**:
-   - Sidebar navigation: **Data & Budget**, **Causal Audit**, **Uplift & DML**, **Prescription**.
+   - Sidebar navigation: **Data & Budget**, **Causal Audit**, **Uplift & DML**, **Prescription**, **Churn Prediction**.
    - **Data & Budget View**: Drag-and-drop CSV upload, dynamic column mapping, promotional budget ($5,000) and unit gross margin ($35.00) inputs, discount option tags, searchable and sortable 50-row paginated preview, and full active-dataset CSV export.
    - **Causal Audit View**:
      - Interactive SVG Causal DAG visualization.
      - Plotly.js propensity overlap histograms with interactive arm toggling.
      - Covariate balance table with unweighted vs. IPW-weighted SMDs and green badges.
    - **Prescription View**: Fits purchase-response models for the control and configured discount arms, then uses SciPy MILP to recommend at most one promotion per customer under the expected-spend budget cap. The view reports expected spend and modeled incremental profit and exports the full recommendation list as CSV.
+   - **Churn Prediction View**: Trains a class-balanced logistic-regression classifier, reports stratified holdout metrics, ranks customers into risk bands, and suggests retention next steps. If the dataset has a supported churn/attrition label, it is used; otherwise the app derives a clearly disclosed proxy from at least 90 days since last purchase and excludes recency from model features to avoid target leakage.
+   - **Retention solutions**: Presents structured-data ML options (classification, churn-driver analysis, survival analysis, and uplift/next-best-action) and deep-learning options (LSTM/GRU or Transformer sequence models and NLP over support text), alongside practical retention actions and experiment guardrails.
+
+### Churn prediction and retention guidance
+
+On upload, common treatment (`discount`, `treatment`, `offer`), outcome (`purchased`, `conversion`, `response`), and revenue columns are mapped automatically, along with eligible non-ID customer features. The form updates to that mapping; verify or adjust it before saving. Treatment and purchase-outcome mappings are optional for churn-only datasets. Causal audit, uplift, and promotion optimization require valid campaign treatment and binary purchase-outcome columns, while churn scoring can run independently. Churn scoring detects a unique binary label candidate or requests a target selection if multiple binary fields are ambiguous; custom two-class target labels let the user choose which class represents churn.
+
+The `/churn` endpoint detects common binary label names (`churn`, `churned`, `churn_status`, `attrition`, and related variants). Without one, it uses a 90-day no-purchase recency proxy when a supported recency column is present. This proxy indicates inactivity, not a confirmed cancellation. Scores are prioritization signals rather than causal intervention effects; validate retention actions with controlled experiments, and use uplift estimates before spending on discounts. Sequence-based deep learning is an extension path for datasets with sufficiently large, timestamped customer histories; the current endpoint implements the tabular ML baseline.
 
 ### Prescription estimate limitations
 

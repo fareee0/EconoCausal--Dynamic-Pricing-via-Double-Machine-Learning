@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Database, GitGraph, TrendingUp, SlidersHorizontal, ShieldCheck } from 'lucide-react';
+import { Activity, Database, GitGraph, TrendingUp, SlidersHorizontal, ShieldCheck, UserRoundX } from 'lucide-react';
 
 export default function Sidebar({ activeView, setActiveView, isConnected = true }) {
   const navItems = [
@@ -7,6 +7,7 @@ export default function Sidebar({ activeView, setActiveView, isConnected = true 
     { id: 'causal_audit', label: 'Causal Audit', icon: GitGraph, badge: '02' },
     { id: 'uplift', label: 'Uplift & DML', icon: TrendingUp, badge: '03' },
     { id: 'prescription', label: 'Prescription', icon: SlidersHorizontal, badge: '04' },
+    { id: 'churn', label: 'Churn Prediction', icon: UserRoundX, badge: '05' },
   ];
 
   return (

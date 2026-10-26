@@ -19,6 +19,7 @@ from backend.app.main import STATE, app
 from backend.causal.graph import get_dag_json, identify_causal_effect
 from backend.causal.propensity import PropensityAuditor, trim_extreme_propensities
 from backend.data.generate import generate_retail_dataset
+from backend.data.generate_churn_campaign import generate_churn_campaign_dataset
 from backend.app.schemas import BudgetConfig, ColumnMapping
 
 
@@ -167,6 +168,175 @@ def test_uplift_endpoint_returns_summary():
     assert "summary_metrics" in payload
     assert "by_segment" in payload
     assert "qini_curve" in payload
+
+
+def test_churn_endpoint_uses_recency_proxy_without_target_leakage(dataset_fixture, monkeypatch):
+    df_obs, _ = dataset_fixture
+    monkeypatch.setitem(STATE, "df", df_obs)
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+
+    response = TestClient(app).get("/churn")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["label_source"] == "recency_proxy"
+    assert "90 days" in payload["target_definition"]
+    assert "days_since_last_purchase" not in payload["feature_columns"]
+    assert len(payload["high_risk_customers"]) == 25
+    assert all(0 <= row["churn_probability"] <= 1 for row in payload["high_risk_customers"])
+    assert all(0 <= value <= 1 for value in payload["validation"]["metrics"].values())
+
+
+def test_churn_endpoint_prefers_explicit_label(dataset_fixture, monkeypatch):
+    df_obs, _ = dataset_fixture
+    df_with_churn = df_obs.copy()
+    df_with_churn["churn"] = np.where(df_with_churn["days_since_last_purchase"] >= 90, "Yes", "No")
+    monkeypatch.setitem(STATE, "df", df_with_churn)
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+
+    response = TestClient(app).get("/churn")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["label_source"] == "explicit"
+    assert "Observed churn label" in payload["target_definition"]
+    assert "churn" not in payload["feature_columns"]
+    assert "days_since_last_purchase" in payload["feature_columns"]
+
+
+def test_uploading_different_csv_remaps_columns_and_enables_predictions(monkeypatch):
+    row_count = 120
+    uploaded = pd.DataFrame({
+        "customer_id": [f"new-{index}" for index in range(row_count)],
+        "discount": np.tile([0, 10], row_count // 2),
+        "conversion": np.tile([0, 1, 1, 0], row_count // 4),
+        "tenure": np.arange(row_count) % 36,
+        "segment": np.tile(["new", "returning", "loyal"], row_count // 3),
+        "churn": np.tile([0, 1], row_count // 2),
+    })
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+    monkeypatch.setitem(STATE, "budget_config", BudgetConfig())
+    client = TestClient(app)
+
+    upload_response = client.post(
+        "/upload",
+        files={"file": ("different_campaign.csv", uploaded.to_csv(index=False), "text/csv")},
+    )
+
+    assert upload_response.status_code == 200, upload_response.text
+    mapping = upload_response.json()["column_mapping"]
+    assert mapping["treatment"] == "discount"
+    assert mapping["outcome"] == "conversion"
+    assert mapping["confounders"] == ["tenure", "segment"]
+
+    config_response = client.post(
+        "/config",
+        json={
+            "column_mapping": mapping,
+            "budget_config": BudgetConfig().model_dump(),
+        },
+    )
+    assert config_response.status_code == 200, config_response.text
+
+    churn_response = client.get("/churn")
+    assert churn_response.status_code == 200, churn_response.text
+    assert churn_response.json()["label_source"] == "explicit"
+
+    uplift_response = client.get("/uplift")
+    assert uplift_response.status_code == 200, uplift_response.text
+    assert uplift_response.json()["available_ground_truth"] is False
+
+
+def test_churn_csv_without_campaign_columns_works_with_selected_target(monkeypatch):
+    row_count = 120
+    customer_data = pd.DataFrame({
+        "CustomerId": [f"account-{index}" for index in range(row_count)],
+        "CreditScore": np.arange(row_count) + 600,
+        "Age": np.arange(row_count) % 50 + 20,
+        "Balance": np.linspace(100, 10_000, row_count),
+        "Geography": np.tile(["North", "South", "West"], row_count // 3),
+        "Account Status": np.tile(["Exited", "Stayed"], row_count // 2),
+    })
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+    client = TestClient(app)
+
+    upload_response = client.post(
+        "/upload",
+        files={"file": ("bank_customers.csv", customer_data.to_csv(index=False), "text/csv")},
+    )
+
+    assert upload_response.status_code == 200, upload_response.text
+    mapping = upload_response.json()["column_mapping"]
+    assert mapping["treatment"] == ""
+    assert mapping["outcome"] == ""
+    assert "Account Status" not in mapping["confounders"]
+
+    churn_response = client.get("/churn")
+    assert churn_response.status_code == 200, churn_response.text
+    churn_result = churn_response.json()
+    assert churn_result["label_source"] == "explicit"
+    assert churn_result["target_column"] == "Account Status"
+    assert "Account Status" not in churn_result["feature_columns"]
+    assert any(
+        customer["customer_id"] == "account-0"
+        for customer in churn_result["high_risk_customers"]
+    )
+
+    audit_response = client.get("/audit")
+    assert audit_response.status_code == 400
+    assert "treatment and purchase-outcome columns" in audit_response.json()["detail"]
+
+    uplift_response = client.get("/uplift")
+    assert uplift_response.status_code == 400
+    assert "treatment and purchase-outcome columns" in uplift_response.json()["detail"]
+
+    prescription_response = client.post("/prescription")
+    assert prescription_response.status_code == 400
+    assert "treatment and purchase-outcome columns" in prescription_response.json()["detail"]
+
+
+def test_churn_endpoint_accepts_user_selected_positive_class(dataset_fixture, monkeypatch):
+    df_obs, _ = dataset_fixture
+    df_custom = df_obs.copy()
+    df_custom["renewal_result"] = np.where(
+        np.arange(len(df_custom)) % 2 == 0,
+        "Needs follow-up",
+        "Retained",
+    )
+    monkeypatch.setitem(STATE, "df", df_custom)
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+
+    response = TestClient(app).get(
+        "/churn",
+        params={"target": "renewal_result", "positive_value": "Needs follow-up"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["target_column"] == "renewal_result"
+    assert payload["positive_value"] == "Needs follow-up"
+    assert "renewal_result" not in payload["feature_columns"]
+
+
+def test_generated_churn_campaign_dataset_runs_prediction_endpoints(monkeypatch):
+    df = generate_churn_campaign_dataset(n_samples=1_200, random_seed=111)
+    monkeypatch.setitem(STATE, "df", None)
+    monkeypatch.setitem(STATE, "column_mapping", ColumnMapping())
+    monkeypatch.setitem(STATE, "budget_config", BudgetConfig())
+    client = TestClient(app)
+    upload_response = client.post(
+        "/upload",
+        files={"file": ("retail_churn_campaign.csv", df.to_csv(index=False), "text/csv")},
+    )
+
+    assert upload_response.status_code == 200, upload_response.text
+    assert upload_response.json()["column_mapping"]["treatment"] == "discount_amount"
+    assert upload_response.json()["column_mapping"]["outcome"] == "purchased"
+    assert client.get("/churn").status_code == 200
+    assert client.get("/uplift").status_code == 200
+    assert client.get("/audit").status_code == 200
+    assert client.post("/prescription").status_code == 200
 
 
 def test_prescription_allocates_within_budget(dataset_fixture, monkeypatch):

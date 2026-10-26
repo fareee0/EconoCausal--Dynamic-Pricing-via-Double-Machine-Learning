@@ -4,6 +4,7 @@ import DataBudgetView from './views/DataBudgetView';
 import CausalAuditView from './views/CausalAuditView';
 import UpliftView from './views/UpliftView';
 import PrescriptionView from './views/PrescriptionView';
+import ChurnPredictionView from './views/ChurnPredictionView';
 import { getDataSummary } from './api';
 
 const viewLabels = {
@@ -11,6 +12,7 @@ const viewLabels = {
   causal_audit: 'Causal Audit',
   uplift: 'Uplift & DML',
   prescription: 'Prescription',
+  churn: 'Churn Prediction',
 };
 
 export default function App() {
@@ -76,10 +78,17 @@ export default function App() {
             {activeView === 'causal_audit' && (
               <CausalAuditView
                 onNavigateUplift={() => setActiveView('uplift')}
+                onNavigateData={() => setActiveView('data_budget')}
               />
             )}
             {activeView === 'uplift' && <UpliftView />}
             {activeView === 'prescription' && <PrescriptionView />}
+            {activeView === 'churn' && (
+              <ChurnPredictionView
+                columns={dataSummary?.columns || []}
+                preview={dataSummary?.preview || []}
+              />
+            )}
           </>
         )}
       </main>

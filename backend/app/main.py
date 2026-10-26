@@ -22,6 +22,8 @@ from scipy.sparse import coo_matrix
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -72,6 +74,49 @@ def load_ground_truth_dataset() -> Optional[pd.DataFrame]:
         if p.exists():
             return pd.read_csv(p)
     return None
+
+
+def _normalized_column_name(column: str) -> str:
+    return "".join(character for character in str(column).lower() if character.isalnum())
+
+
+def _find_column(columns: List[str], aliases: List[str]) -> Optional[str]:
+    normalized = {_normalized_column_name(column): column for column in columns}
+    return next((normalized[alias] for alias in aliases if alias in normalized), None)
+
+
+def _churn_target_candidates(df: pd.DataFrame, excluded: set[str]) -> List[str]:
+    candidates = []
+    for column in df.columns:
+        normalized = _normalized_column_name(column)
+        if normalized in excluded or normalized in {
+            "customerid", "id", "rowid", "revenue", "sales", "balance", "amount",
+            "discount", "discountamount", "treatment", "treatmentarm", "purchase",
+            "purchased", "conversion", "converted",
+        }:
+            continue
+        values = df[column].dropna().unique()
+        if len(values) == 2:
+            candidates.append(column)
+    return candidates
+
+
+def _validate_campaign_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> None:
+    """Fail clearly when the active file cannot support campaign causal analysis."""
+    missing_columns = [
+        column
+        for column in (mapping.treatment, mapping.outcome)
+        if not column or column not in df.columns
+    ]
+    if missing_columns:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This CSV does not have mapped treatment and purchase-outcome columns. "
+                "Choose a campaign treatment column and binary purchase/conversion outcome "
+                "in Data & Budget to use causal audit, uplift, and prescription."
+            ),
+        )
 
 
 @asynccontextmanager
@@ -168,16 +213,42 @@ async def upload_dataset(file: UploadFile = File(...)):
         STATE["filename"] = file.filename or "uploaded_campaign.csv"
         STATE["audit_cache"] = None  # invalidate cache
 
-        # Auto-detect or adapt column mapping
+        # Re-map common column names when the uploaded dataset differs from the active one.
         mapping = STATE["column_mapping"]
-        available_cols = set(df.columns)
-        confounders = [c for c in mapping.confounders if c in available_cols]
-        if not confounders:
-            confounders = [
-                c for c in df.columns
-                if c not in {mapping.treatment, mapping.outcome, mapping.revenue, "customer_id", "id"}
-            ]
-        mapping.confounders = confounders
+        columns = list(df.columns)
+        treatment = _find_column(
+            columns,
+            ["discountamount", "discount", "treatment", "treatmentarm", "treatmentgroup", "offeramount", "promotionamount"],
+        )
+        outcome = _find_column(
+            columns,
+            ["purchased", "purchase", "purchaseflag", "converted", "conversion", "conversionflag", "response", "outcome"],
+        )
+        revenue = _find_column(
+            columns,
+            ["revenue", "sales", "salesamount", "ordervalue", "transactionvalue"],
+        )
+        mapping.treatment = treatment or (mapping.treatment if mapping.treatment in df.columns else "")
+        mapping.outcome = outcome or (mapping.outcome if mapping.outcome in df.columns else "")
+        mapping.revenue = revenue or (mapping.revenue if mapping.revenue in df.columns else None)
+
+        excluded_names = {
+            "customerid", "id", "rowid", "churn", "churned", "ischurn", "ischurned",
+            "churnstatus", "churnlabel", "attrition", "attritionflag", "attrited", "isattrited",
+            "exited", "exit", "defaulted", "default", "target", "label", "accountstatus",
+            _normalized_column_name(mapping.treatment),
+            _normalized_column_name(mapping.outcome),
+            _normalized_column_name(mapping.revenue) if mapping.revenue else "",
+        }
+        mapping.confounders = [
+            column
+            for column in columns
+            if _normalized_column_name(column) not in excluded_names
+            and (
+                pd.api.types.is_numeric_dtype(df[column])
+                or df[column].nunique(dropna=True) <= 50
+            )
+        ]
 
         preview_records = df.head(50).fillna("").to_dict(orient="records")
         return DataSummaryResponse(
@@ -189,6 +260,8 @@ async def upload_dataset(file: UploadFile = File(...)):
             column_mapping=STATE["column_mapping"],
             budget_config=STATE["budget_config"],
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process CSV: {str(e)}")
 
@@ -200,6 +273,38 @@ def update_configuration(
 ):
     """Update column mapping and budget settings."""
     if column_mapping is not None:
+        if STATE["df"] is not None:
+            missing_columns = sorted(
+                column
+                for column in [
+                    column_mapping.treatment,
+                    column_mapping.outcome,
+                    *column_mapping.confounders,
+                ]
+                if column and column not in STATE["df"].columns
+            )
+            if missing_columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Mapped columns are missing from the active dataset: {', '.join(missing_columns)}",
+                )
+            if (
+                column_mapping.treatment
+                and column_mapping.outcome
+                and column_mapping.treatment == column_mapping.outcome
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Treatment and outcome must be different columns.",
+                )
+            if any(
+                column and column in column_mapping.confounders
+                for column in (column_mapping.treatment, column_mapping.outcome)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Treatment and outcome columns cannot also be selected as confounders.",
+                )
         STATE["column_mapping"] = column_mapping
         STATE["audit_cache"] = None  # invalidate cache
     if budget_config is not None:
@@ -223,6 +328,7 @@ def get_causal_audit():
 
     df: pd.DataFrame = STATE["df"]
     mapping: ColumnMapping = STATE["column_mapping"]
+    _validate_campaign_mapping(df, mapping)
 
     # 1. Identify causal effect & DAG
     dag_result = identify_causal_effect(
@@ -282,6 +388,7 @@ def get_uplift_summary():
 
     df: pd.DataFrame = STATE["df"]
     mapping: ColumnMapping = STATE["column_mapping"]
+    _validate_campaign_mapping(df, mapping)
     required_columns = [mapping.treatment, mapping.outcome, *mapping.confounders]
     missing_columns = sorted(set(required_columns) - set(df.columns))
     if missing_columns:
@@ -352,39 +459,55 @@ def get_uplift_summary():
     }
 
     ground_truth = load_ground_truth_dataset()
-    available_ground_truth = ground_truth is not None and not ground_truth.empty
+    available_ground_truth = False
     by_segment = []
     qini_curve = []
 
-    if available_ground_truth and {"customer_id", "segment", "tau_10_true", "tau_20_true"}.issubset(ground_truth.columns):
-        combined = combined.merge(
-            ground_truth[["customer_id", "segment", "tau_10_true", "tau_20_true"]],
-            on="customer_id",
-            how="left",
-        )
+    ground_truth_columns = {"customer_id", "segment", "tau_10_true", "tau_20_true"}
+    if (
+        ground_truth is not None
+        and not ground_truth.empty
+        and ground_truth_columns.issubset(ground_truth.columns)
+        and "customer_id" in combined.columns
+    ):
+        known_customer_ids = set(ground_truth["customer_id"].dropna())
+        matched_ids = combined["customer_id"].notna() & combined["customer_id"].isin(known_customer_ids)
+        if matched_ids.any() and matched_ids.all():
+            validation_truth = ground_truth[
+                ["customer_id", "segment", "tau_10_true", "tau_20_true"]
+            ].rename(columns={
+                "segment": "ground_truth_segment",
+                "tau_10_true": "ground_truth_tau_10_true",
+                "tau_20_true": "ground_truth_tau_20_true",
+            })
+            combined = combined.merge(validation_truth, on="customer_id", how="left")
+            available_ground_truth = True
+
+    if available_ground_truth:
         for arm, true_col in [(10, "tau_10_true"), (20, "tau_20_true")]:
             estimate_col = f"estimated_uplift_{arm}"
-            valid_truth = combined[true_col].notna()
+            validation_column = f"ground_truth_{true_col}"
+            valid_truth = combined[validation_column].notna()
             if valid_truth.any():
-                true_values = combined.loc[valid_truth, true_col].to_numpy(dtype=float)
+                true_values = combined.loc[valid_truth, validation_column].to_numpy(dtype=float)
                 est_values = combined.loc[valid_truth, estimate_col].to_numpy(dtype=float)
                 summary_metrics[f"rmse_{arm}"] = round(float(np.sqrt(np.mean((est_values - true_values) ** 2))), 4)
                 summary_metrics[f"mae_{arm}"] = round(float(np.mean(np.abs(est_values - true_values))), 4)
 
-        for segment_name, group in combined.groupby("segment", sort=True):
+        for segment_name, group in combined.groupby("ground_truth_segment", sort=True):
             if group.empty:
                 continue
             by_segment.append({
                 "segment": segment_name,
                 "customers": int(len(group)),
-                "avg_true_uplift_10": round(float(group["tau_10_true"].mean()), 4) if group["tau_10_true"].notna().any() else None,
+                "avg_true_uplift_10": round(float(group["ground_truth_tau_10_true"].mean()), 4) if group["ground_truth_tau_10_true"].notna().any() else None,
                 "avg_estimated_uplift_10": round(float(group["estimated_uplift_10"].mean()), 4),
-                "avg_true_uplift_20": round(float(group["tau_20_true"].mean()), 4) if group["tau_20_true"].notna().any() else None,
+                "avg_true_uplift_20": round(float(group["ground_truth_tau_20_true"].mean()), 4) if group["ground_truth_tau_20_true"].notna().any() else None,
                 "avg_estimated_uplift_20": round(float(group["estimated_uplift_20"].mean()), 4),
             })
 
         for arm in (10, 20):
-            true_col = f"tau_{arm}_true"
+            true_col = f"ground_truth_tau_{arm}_true"
             estimate_col = f"estimated_uplift_{arm}"
             valid_truth = combined[true_col].notna()
             if not valid_truth.any():
@@ -402,7 +525,7 @@ def get_uplift_summary():
             qini_curve.append({"discount": arm, "curve": step_values})
 
     elif "segment" in df.columns:
-        for segment_name, group in df.groupby("segment", sort=True):
+        for segment_name, group in combined.groupby("segment", sort=True):
             by_segment.append({
                 "segment": segment_name,
                 "customers": int(len(group)),
@@ -427,6 +550,304 @@ def get_uplift_summary():
     }
 
 
+@app.get("/churn")
+def get_churn_predictions(
+    target: Optional[str] = None,
+    positive_value: Optional[str] = None,
+):
+    """Train a churn classifier, report holdout metrics, and score active customers."""
+    if STATE["df"] is None:
+        STATE["df"] = load_default_dataset()
+
+    df: pd.DataFrame = STATE["df"]
+    mapping: ColumnMapping = STATE["column_mapping"]
+    normalized_columns = {
+        _normalized_column_name(column): column
+        for column in df.columns
+    }
+    churn_names = {
+        "churn",
+        "churned",
+        "ischurned",
+        "ischurn",
+        "churnstatus",
+        "churnlabel",
+        "attrition",
+        "attritionflag",
+        "attrited",
+        "isattrited",
+        "exited",
+    }
+    if target is not None and target not in df.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Selected churn target '{target}' is not a column in the active dataset.",
+        )
+    churn_column = target or next(
+        (column for name, column in normalized_columns.items() if name in churn_names),
+        None,
+    )
+    recency_names = {
+        "dayssincelastpurchase",
+        "dayssincelastorder",
+        "dayssincelastvisit",
+        "daysinactive",
+        "recencydays",
+        "lastpurchasedaysago",
+    }
+
+    explicit_target_selection = target is not None
+    if churn_column is None:
+        excluded_target_names = {
+            _normalized_column_name(column)
+            for column in (mapping.treatment, mapping.outcome, mapping.revenue)
+            if column
+        }
+        candidates = _churn_target_candidates(df, excluded_target_names)
+        named_candidates = [
+            column for column in candidates
+            if any(token in _normalized_column_name(column) for token in (
+                "churn", "attrition", "exit", "cancel", "target", "label", "default", "status",
+            ))
+        ]
+        if len(named_candidates) == 1:
+            churn_column = named_candidates[0]
+        elif not named_candidates and len(candidates) == 1:
+            churn_column = candidates[0]
+        elif len(named_candidates) > 1 or len(candidates) > 1:
+            ambiguous = named_candidates or candidates
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Multiple binary columns could be the churn label. Select the correct target "
+                    f"in Churn Prediction: {', '.join(ambiguous[:12])}."
+                ),
+            )
+
+    if churn_column is not None:
+        raw_target = df[churn_column]
+        numeric_target = pd.to_numeric(raw_target, errors="coerce")
+        numeric_classes = set(numeric_target.dropna().unique())
+        if positive_value is not None:
+            normalized_target = raw_target.astype("string").str.strip().str.lower()
+            observed_values = normalized_target.dropna().unique()
+            if len(observed_values) != 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selected churn target '{churn_column}' must contain exactly two non-empty classes.",
+                )
+            labels_by_row = (normalized_target == positive_value.strip().lower()).astype("Int64")
+            valid_mask = raw_target.notna()
+            if not labels_by_row.loc[valid_mask].any():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Positive churn value '{positive_value}' is not present in '{churn_column}'.",
+                )
+            labels = labels_by_row.loc[valid_mask].astype(int).to_numpy()
+        elif numeric_classes and numeric_classes.issubset({0, 1}):
+            valid_mask = numeric_target.notna()
+            labels = numeric_target.loc[valid_mask].astype(int).to_numpy()
+        else:
+            normalized_target = raw_target.astype("string").str.strip().str.lower()
+            positive_labels = {
+                "1", "true", "yes", "y", "churn", "churned", "left", "inactive", "attrited", "exited",
+            }
+            negative_labels = {
+                "0", "false", "no", "n", "not churned", "no churn", "retained",
+                "active", "stay", "stayed", "current", "existing", "not exited",
+            }
+            label_map = {
+                **{value: 1 for value in positive_labels},
+                **{value: 0 for value in negative_labels},
+            }
+            labels_by_row = normalized_target.map(label_map)
+            valid_mask = labels_by_row.notna()
+            if not valid_mask.any():
+                observed_values = sorted(normalized_target.dropna().unique().tolist())
+                if explicit_target_selection and len(observed_values) == 2:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Target '{churn_column}' has values {', '.join(observed_values)}. "
+                            "Choose which value means churn in the Positive churn value field."
+                        ),
+                    )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Target '{churn_column}' must have binary 0/1, Yes/No, churn/retained values.",
+                )
+            labels = labels_by_row.loc[valid_mask].astype(int).to_numpy()
+        target_definition = f"Observed churn label from '{churn_column}'."
+        label_source = "explicit"
+    else:
+        recency_column = next(
+            (column for name, column in normalized_columns.items() if name in recency_names),
+            None,
+        )
+        if recency_column is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Churn prediction needs a binary churn label (for example, churn or attrition) "
+                    "or a supported recency column to create a disclosed proxy label."
+                ),
+            )
+        recency = pd.to_numeric(df[recency_column], errors="coerce")
+        valid_mask = recency.notna()
+        labels = (recency.loc[valid_mask] >= 90).astype(int).to_numpy()
+        churn_column = None
+        target_definition = (
+            f"Proxy label: no purchase for at least 90 days, derived from '{recency_column}'. "
+            "This is not a confirmed cancellation or account-closure label."
+        )
+        label_source = "recency_proxy"
+
+    excluded_columns = {
+        column
+        for column in df.columns
+        if _normalized_column_name(column) in churn_names
+    }
+    excluded_columns.update(
+        column
+        for column in df.columns
+        if str(column).lower() in {"customer_id", "id", "row_id"}
+    )
+    excluded_columns.update(
+        column
+        for column in (mapping.treatment, mapping.outcome, mapping.revenue)
+        if column in df.columns
+    )
+    if churn_column is not None:
+        excluded_columns.add(churn_column)
+    if label_source == "recency_proxy":
+        excluded_columns.update(
+            column
+            for column in df.columns
+            if _normalized_column_name(column) in recency_names
+        )
+
+    feature_columns = [
+        column
+        for column in mapping.confounders
+        if column in df.columns and column not in excluded_columns
+    ]
+    if not feature_columns:
+        feature_columns = [
+            column for column in df.columns if column not in excluded_columns
+        ]
+    if not feature_columns:
+        raise HTTPException(status_code=400, detail="No eligible customer features are available for churn prediction.")
+
+    features = df.loc[valid_mask, feature_columns].replace([np.inf, -np.inf], np.nan)
+    features = features.loc[:, features.notna().any(axis=0)]
+    feature_columns = list(features.columns)
+    if not feature_columns:
+        raise HTTPException(status_code=400, detail="All available churn prediction features are empty.")
+
+    class_counts = np.bincount(labels, minlength=2)
+    if len(labels) < 20 or class_counts.min() < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Churn prediction requires at least four examples in each class and 20 valid rows.",
+        )
+
+    numeric_columns = [
+        column for column in feature_columns if pd.api.types.is_numeric_dtype(features[column])
+    ]
+    categorical_columns = [column for column in feature_columns if column not in numeric_columns]
+    transformers = []
+    if numeric_columns:
+        transformers.append(
+            (
+                "numeric",
+                make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
+                numeric_columns,
+            )
+        )
+    if categorical_columns:
+        transformers.append(
+            (
+                "categorical",
+                make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder(handle_unknown="ignore")),
+                categorical_columns,
+            )
+        )
+    model = make_pipeline(
+        ColumnTransformer(transformers),
+        LogisticRegression(max_iter=500, class_weight="balanced"),
+    )
+
+    train_indices, test_indices = train_test_split(
+        np.arange(len(labels)),
+        test_size=0.25,
+        random_state=42,
+        stratify=labels,
+    )
+    model.fit(features.iloc[train_indices], labels[train_indices])
+    test_scores = model.predict_proba(features.iloc[test_indices])[:, 1]
+    test_predictions = (test_scores >= 0.5).astype(int)
+    metrics = {
+        "accuracy": round(float(accuracy_score(labels[test_indices], test_predictions)), 4),
+        "precision": round(float(precision_score(labels[test_indices], test_predictions, zero_division=0)), 4),
+        "recall": round(float(recall_score(labels[test_indices], test_predictions, zero_division=0)), 4),
+        "f1": round(float(f1_score(labels[test_indices], test_predictions, zero_division=0)), 4),
+        "roc_auc": round(float(roc_auc_score(labels[test_indices], test_scores)), 4),
+    }
+
+    model.fit(features, labels)
+    scored_features = df.loc[:, feature_columns].replace([np.inf, -np.inf], np.nan)
+    churn_scores = model.predict_proba(scored_features)[:, 1]
+    risk_levels = np.where(churn_scores >= 0.7, "High", np.where(churn_scores >= 0.4, "Medium", "Low"))
+    customer_id_column = next(
+        (column for column in df.columns if _normalized_column_name(column) == "customerid"),
+        None,
+    )
+    sorted_indices = np.argsort(-churn_scores)[:25]
+    high_risk_customers = []
+    for row_index in sorted_indices:
+        score = float(churn_scores[row_index])
+        if score >= 0.7:
+            action = "Prioritize a personal retention conversation and investigate service friction."
+        elif score >= 0.4:
+            action = "Use a relevant re-engagement message and monitor response before offering incentives."
+        else:
+            action = "Continue useful loyalty engagement; avoid unnecessary discounting."
+        high_risk_customers.append(
+            {
+                "row_index": int(row_index),
+                "customer_id": str(df.iloc[row_index][customer_id_column]) if customer_id_column else None,
+                "churn_probability": round(score, 4),
+                "risk_level": str(risk_levels[row_index]),
+                "suggested_action": action,
+            }
+        )
+
+    return {
+        "status": "ready",
+        "observations": int(len(labels)),
+        "label_source": label_source,
+        "target_column": churn_column,
+        "positive_value": positive_value or "Inferred from binary label encoding",
+        "target_definition": target_definition,
+        "model": "Logistic Regression with class-balanced training",
+        "validation": {
+            "method": "Stratified 75/25 holdout",
+            "metrics": metrics,
+        },
+        "risk_distribution": {
+            "high": int(np.sum(risk_levels == "High")),
+            "medium": int(np.sum(risk_levels == "Medium")),
+            "low": int(np.sum(risk_levels == "Low")),
+        },
+        "feature_columns": feature_columns,
+        "high_risk_customers": high_risk_customers,
+        "scoring_note": (
+            "Scores rank modeled risk; they are not causal estimates. Validate retention actions "
+            "with controlled experiments and use uplift estimates to target incentives."
+        ),
+    }
+
+
 @app.post("/prescription")
 def create_prescription():
     """Estimate response by discount arm and optimize customer-level allocation."""
@@ -435,6 +856,7 @@ def create_prescription():
 
     df: pd.DataFrame = STATE["df"]
     mapping: ColumnMapping = STATE["column_mapping"]
+    _validate_campaign_mapping(df, mapping)
     budget: BudgetConfig = STATE["budget_config"]
     required_columns = [mapping.treatment, mapping.outcome, *mapping.confounders]
     missing_columns = sorted(set(required_columns) - set(df.columns))
