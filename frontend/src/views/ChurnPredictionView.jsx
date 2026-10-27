@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, BrainCircuit, HeartHandshake, RefreshCw, ShieldAlert, Sparkles, Target } from 'lucide-react';
+import { Activity, BrainCircuit, Download, HeartHandshake, RefreshCw, ShieldAlert, Sparkles, Target } from 'lucide-react';
 import { getChurnPredictions } from '../api';
 
 const formatPercent = (value) => `${(Number(value || 0) * 100).toFixed(1)}%`;
@@ -19,6 +19,31 @@ const valuesForColumn = (column, preview) => [...new Set(
     .filter((value) => value !== '' && value !== null && value !== undefined)
     .map(String)
 )];
+
+const exportHighRiskCustomers = (customers) => {
+  const headers = ['row_index', 'customer_id', 'churn_probability', 'risk_level', 'suggested_action'];
+  const escapeCsv = (value) => {
+    const text = String(value ?? '');
+    const safeText = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+  };
+  const rows = customers.map((customer) => [
+    customer.row_index,
+    customer.customer_id,
+    customer.churn_probability,
+    customer.risk_level,
+    customer.suggested_action,
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'high-risk-customers.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+};
 
 const solutionTracks = [
   {
@@ -142,7 +167,7 @@ export default function ChurnPredictionView({ columns = [], preview = [] }) {
           <span className="churn-target-help">
             Choose the binary column that indicates churn. The target column is excluded from model features.
           </span>
-          {target && targetValues.length === 2 && !targetValues.some((value) => positiveValues.has(value.toLowerCase())) && (
+          {target && targetValues.length === 2 && (
             <>
               <label className="form-label" htmlFor="churn-positive-value">Which value means churn?</label>
               <select
@@ -155,7 +180,7 @@ export default function ChurnPredictionView({ columns = [], preview = [] }) {
                   setError('');
                 }}
               >
-                <option value="">Select the positive churn class</option>
+                <option value="">Use inferred positive class</option>
                 {targetValues.map((value) => <option key={value} value={value}>{value}</option>)}
               </select>
             </>
@@ -212,6 +237,15 @@ export default function ChurnPredictionView({ columns = [], preview = [] }) {
                   <h3>Highest-risk customers</h3>
                   <p>Top 25 by predicted risk; suggested action is a starting point, not an automated offer.</p>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => exportHighRiskCustomers(result.high_risk_customers)}
+                  disabled={!result.high_risk_customers?.length}
+                >
+                  <Download size={16} />
+                  Export CSV
+                </button>
               </div>
               <div className="prescription-table-wrap">
                 <table className="prescription-table churn-table">
