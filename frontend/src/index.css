@@ -854,6 +854,32 @@ h1, h2, h3, h4, .brand-text {
   margin-bottom: 18px;
 }
 
+.churn-driver-panel {
+  margin-bottom: 18px;
+}
+
+.churn-driver-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 4px;
+}
+
+.churn-driver-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: #f6f8fb;
+  color: var(--text-main);
+  font-size: 0.84rem;
+}
+
+.churn-driver-row span:last-child {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .churn-action-cell {
   min-width: 350px;
   max-width: 520px;

@@ -20,6 +20,8 @@ import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import coo_matrix
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.inspection import permutation_importance
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
@@ -99,6 +101,20 @@ def _churn_target_candidates(df: pd.DataFrame, excluded: set[str]) -> List[str]:
         if len(values) == 2:
             candidates.append(column)
     return candidates
+
+
+def _best_f1_threshold(labels: np.ndarray, scores: np.ndarray) -> float:
+    """Choose a classification threshold using validation data only."""
+    thresholds = np.unique(np.concatenate(([0.0, 0.5, 1.0], scores)))
+    f1_scores = [
+        f1_score(labels, scores >= threshold, zero_division=0)
+        for threshold in thresholds
+    ]
+    best_f1 = max(f1_scores)
+    return float(min(
+        (threshold for threshold, score in zip(thresholds, f1_scores) if score == best_f1),
+        key=lambda threshold: abs(threshold - 0.5),
+    ))
 
 
 def _validate_campaign_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> None:
@@ -755,37 +771,94 @@ def get_churn_predictions(
         column for column in feature_columns if pd.api.types.is_numeric_dtype(features[column])
     ]
     categorical_columns = [column for column in feature_columns if column not in numeric_columns]
-    transformers = []
-    if numeric_columns:
-        transformers.append(
-            (
-                "numeric",
-                make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
-                numeric_columns,
-            )
-        )
-    if categorical_columns:
-        transformers.append(
-            (
-                "categorical",
-                make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder(handle_unknown="ignore")),
-                categorical_columns,
-            )
-        )
-    model = make_pipeline(
-        ColumnTransformer(transformers),
-        LogisticRegression(max_iter=500, class_weight="balanced"),
-    )
-
     train_indices, test_indices = train_test_split(
         np.arange(len(labels)),
         test_size=0.25,
         random_state=42,
         stratify=labels,
     )
+    fit_indices, validation_indices = train_test_split(
+        train_indices,
+        test_size=0.2,
+        random_state=43,
+        stratify=labels[train_indices],
+    )
+
+    def build_model(classifier: Any):
+        transformers = []
+        if numeric_columns:
+            transformers.append(
+                (
+                    "numeric",
+                    make_pipeline(SimpleImputer(strategy="median"), StandardScaler()),
+                    numeric_columns,
+                )
+            )
+        if categorical_columns:
+            transformers.append(
+                (
+                    "categorical",
+                    make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder(handle_unknown="ignore")),
+                    categorical_columns,
+                )
+            )
+        return make_pipeline(ColumnTransformer(transformers), classifier)
+
+    candidate_classifiers = {
+        "Logistic Regression": LogisticRegression(max_iter=500, class_weight="balanced"),
+        "Random Forest": RandomForestClassifier(
+            n_estimators=120,
+            max_depth=10,
+            min_samples_leaf=5,
+            class_weight="balanced_subsample",
+            n_jobs=-1,
+            random_state=42,
+        ),
+    }
+    candidate_models = {}
+    candidate_scores = {}
+    selection_auc = {}
+    for model_name, classifier in candidate_classifiers.items():
+        candidate = build_model(classifier)
+        candidate.fit(features.iloc[fit_indices], labels[fit_indices])
+        validation_scores = candidate.predict_proba(features.iloc[validation_indices])[:, 1]
+        candidate_models[model_name] = candidate
+        candidate_scores[model_name] = validation_scores
+        selection_auc[model_name] = float(
+            roc_auc_score(labels[validation_indices], validation_scores)
+        )
+
+    selected_model_name = max(selection_auc, key=selection_auc.get)
+    selected_model = candidate_models[selected_model_name]
+    decision_threshold = _best_f1_threshold(
+        labels[validation_indices],
+        candidate_scores[selected_model_name],
+    )
+    driver_importances = permutation_importance(
+        selected_model,
+        features.iloc[validation_indices],
+        labels[validation_indices],
+        scoring="roc_auc",
+        n_repeats=3,
+        random_state=42,
+    )
+    top_churn_drivers = [
+        {
+            "feature": feature_columns[index],
+            "importance": round(float(importance), 4),
+        }
+        for index, importance in sorted(
+            enumerate(driver_importances.importances_mean),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        if importance > 0
+    ][:5]
+
+    model = build_model(candidate_classifiers[selected_model_name])
     model.fit(features.iloc[train_indices], labels[train_indices])
     test_scores = model.predict_proba(features.iloc[test_indices])[:, 1]
-    test_predictions = (test_scores >= 0.5).astype(int)
+    test_predictions = (test_scores >= decision_threshold).astype(int)
     metrics = {
         "accuracy": round(float(accuracy_score(labels[test_indices], test_predictions)), 4),
         "precision": round(float(precision_score(labels[test_indices], test_predictions, zero_division=0)), 4),
@@ -829,11 +902,16 @@ def get_churn_predictions(
         "target_column": churn_column,
         "positive_value": positive_value or "Inferred from binary label encoding",
         "target_definition": target_definition,
-        "model": "Logistic Regression with class-balanced training",
+        "model": selected_model_name,
         "validation": {
-            "method": "Stratified 75/25 holdout",
+            "method": "Stratified 75/25 holdout; model selection and threshold tuning use training data only",
             "metrics": metrics,
+            "decision_threshold": round(decision_threshold, 4),
+            "candidate_roc_auc": {
+                name: round(auc, 4) for name, auc in selection_auc.items()
+            },
         },
+        "top_churn_drivers": top_churn_drivers,
         "risk_distribution": {
             "high": int(np.sum(risk_levels == "High")),
             "medium": int(np.sum(risk_levels == "Medium")),

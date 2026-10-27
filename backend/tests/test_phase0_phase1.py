@@ -186,6 +186,19 @@ def test_churn_endpoint_uses_recency_proxy_without_target_leakage(dataset_fixtur
     assert len(payload["high_risk_customers"]) == 25
     assert all(0 <= row["churn_probability"] <= 1 for row in payload["high_risk_customers"])
     assert all(0 <= value <= 1 for value in payload["validation"]["metrics"].values())
+    assert payload["model"] in {"Logistic Regression", "Random Forest"}
+    assert set(payload["validation"]["candidate_roc_auc"]) == {
+        "Logistic Regression",
+        "Random Forest",
+    }
+    selected_auc = payload["validation"]["candidate_roc_auc"][payload["model"]]
+    assert selected_auc >= max(payload["validation"]["candidate_roc_auc"].values()) - 0.0001
+    assert 0 <= payload["validation"]["decision_threshold"] <= 1
+    assert payload["top_churn_drivers"]
+    assert all(
+        driver["feature"] in payload["feature_columns"]
+        for driver in payload["top_churn_drivers"]
+    )
 
 
 def test_churn_endpoint_prefers_explicit_label(dataset_fixture, monkeypatch):

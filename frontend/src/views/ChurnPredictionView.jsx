@@ -219,7 +219,12 @@ export default function ChurnPredictionView({ columns = [], preview = [] }) {
               <div className="kpi-card">
                 <span className="kpi-label">Holdout recall</span>
                 <span className="kpi-value">{formatPercent(metrics.recall)}</span>
-                <span className="kpi-subtext">At a 50% classification threshold</span>
+                <span className="kpi-subtext">At the tuned {formatPercent(result.validation.decision_threshold)} threshold</span>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">Selected model</span>
+                <span className="kpi-value" style={{ fontSize: '1.1rem' }}>{result.model}</span>
+                <span className="kpi-subtext">Chosen on training-only validation data</span>
               </div>
             </div>
 
@@ -229,6 +234,30 @@ export default function ChurnPredictionView({ columns = [], preview = [] }) {
               <span><b>Accuracy</b> {formatPercent(metrics.accuracy)}</span>
               <span><b>Medium risk</b> {Number(risk.medium || 0).toLocaleString()}</span>
               <span><b>Low risk</b> {Number(risk.low || 0).toLocaleString()}</span>
+            </div>
+
+            <div className="analysis-panel churn-driver-panel">
+              <div className="analysis-panel-heading">
+                <div>
+                  <h3>Top churn drivers</h3>
+                  <p>Validation ROC AUC change when each feature is shuffled; this is predictive, not causal.</p>
+                </div>
+              </div>
+              <div className="churn-driver-list">
+                {result.top_churn_drivers.length === 0 && (
+                  <div className="churn-driver-row">No stable predictive feature signal was found.</div>
+                )}
+                {result.top_churn_drivers.map((driver) => (
+                  <div className="churn-driver-row" key={driver.feature}>
+                    <span>{driver.feature}</span>
+                    <span>{Number(driver.importance).toFixed(3)} AUC impact</span>
+                  </div>
+                ))}
+              </div>
+              <div className="churn-target-help">
+                Model selection AUC: {Object.entries(result.validation.candidate_roc_auc)
+                  .map(([name, auc]) => `${name} ${formatPercent(auc)}`).join(' · ')}
+              </div>
             </div>
 
             <div className="analysis-panel churn-customer-panel">
