@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Plot from 'react-plotly.js';
+import Plot from '../components/ThemedPlot';
 import { GitGraph, ShieldCheck, CheckCircle2, AlertTriangle, Scale, Activity, RefreshCw } from 'lucide-react';
 import { getCausalAudit } from '../api';
 
@@ -63,9 +63,9 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
 
   const traces = [];
   const armColors = {
-    'received_0': '#255496',
-    'received_10': '#087e8b',
-    'received_20': '#16805d',
+    'received_0': '#82adff',
+    'received_10': '#55d4c5',
+    'received_20': '#b6a2ff',
   };
   const armLabels = {
     'received_0': 'Received $0 (Control)',
@@ -92,28 +92,28 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
     {
       key: 'smd_unweighted_10',
       name: 'Raw · $10 vs $0',
-      color: '#255496',
+      color: '#82adff',
       symbol: 'circle',
       offset: -0.18,
     },
     {
       key: 'smd_weighted_10',
       name: 'IPW · $10 vs $0',
-      color: '#255496',
+      color: '#55d4c5',
       symbol: 'diamond',
       offset: -0.06,
     },
     {
       key: 'smd_unweighted_20',
       name: 'Raw · $20 vs $0',
-      color: '#b06a12',
+      color: '#f3c46f',
       symbol: 'circle',
       offset: 0.06,
     },
     {
       key: 'smd_weighted_20',
       name: 'IPW · $20 vs $0',
-      color: '#b06a12',
+      color: '#f282bd',
       symbol: 'diamond',
       offset: 0.18,
     },
@@ -430,7 +430,7 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
                 y1: 1,
                 xref: 'x',
                 yref: 'paper',
-                line: { color: '#b54752', width: 2, dash: 'dash' },
+                line: { color: '#f282bd', width: 2, dash: 'dash' },
               }],
               annotations: [{
                 x: 0.1,
@@ -440,7 +440,7 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
                 text: 'Balance threshold (0.10)',
                 showarrow: false,
                 xanchor: 'left',
-                font: { color: '#a33f49', size: 11 },
+                font: { color: '#f4a8d1', size: 11 },
               }],
               legend: { orientation: 'h', y: 1.18, x: 0, yanchor: 'bottom' },
             }}

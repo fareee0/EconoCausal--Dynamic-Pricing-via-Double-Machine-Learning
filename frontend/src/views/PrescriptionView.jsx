@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Plot from 'react-plotly.js';
+import Plot from '../components/ThemedPlot';
 import { Download, DollarSign, LoaderCircle, Sliders, Target, TrendingUp } from 'lucide-react';
 import { runPrescription } from '../api';
 
@@ -153,7 +153,7 @@ export default function PrescriptionView() {
                         type: 'bar',
                         x: discountLabels,
                         y: discountLevels.map((discount) => allocationByDiscount.get(discount).customers),
-                        marker: { color: '#255496' },
+                        marker: { color: '#55d4c5' },
                         customdata: discountLevels.map((discount) => [
                           allocationByDiscount.get(discount).spend,
                           allocationByDiscount.get(discount).profit,
@@ -189,7 +189,7 @@ export default function PrescriptionView() {
                         type: 'bar',
                         x: discountLabels,
                         y: discountLevels.map((discount) => allocationByDiscount.get(discount).profit),
-                        marker: { color: '#16805d' },
+                        marker: { color: '#f282bd' },
                         customdata: discountLevels.map((discount) => [
                           allocationByDiscount.get(discount).customers,
                           allocationByDiscount.get(discount).spend,

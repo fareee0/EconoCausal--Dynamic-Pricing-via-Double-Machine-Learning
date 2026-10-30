@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import Plot from 'react-plotly.js';
+import Plot from '../components/ThemedPlot';
 import { Activity, Layers, Target, TrendingUp } from 'lucide-react';
 import { getUpliftSummary } from '../api';
 
@@ -170,14 +170,14 @@ export default function UpliftView() {
                         x: segmentRows.map((row) => row.segment),
                         y: segmentRows.map((row) => Number(row.avg_estimated_uplift_10 ?? 0)),
                         name: 'Est. @ $10',
-                        marker: { color: '#255496' },
+                        marker: { color: '#b6a2ff' },
                       },
                       {
                         type: 'bar',
                         x: segmentRows.map((row) => row.segment),
                         y: segmentRows.map((row) => Number(row.avg_estimated_uplift_20 ?? 0)),
                         name: 'Est. @ $20',
-                        marker: { color: '#16805d' },
+                        marker: { color: '#55d4c5' },
                       },
                     ]}
                     layout={{
