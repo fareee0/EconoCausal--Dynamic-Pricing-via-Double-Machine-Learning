@@ -98,6 +98,7 @@ python -m backend.data.generate_churn_campaign
    - Multinomial Logistic Regression model for $P(T = d \mid X)$.
    - Positivity / overlap check across all three arms ($d \in \{0, 10, 20\}$).
    - Stabilized Inverse Propensity Weighting (IPW).
+   - Per-arm effective sample size (ESS), retained-information fraction, and maximum weight to flag weight concentration.
    - **Balance Result**: **100% of covariates achieved Standardized Mean Difference (SMD) < 0.10** after weighting (max unweighted SMD was $0.4891$, reduced to $0.0362$).
    - Extreme propensity trimming: 4 out of 20,000 units trimmed (< 0.02%).
 3. **Frontend Dashboard (`frontend/`)**:

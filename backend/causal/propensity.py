@@ -204,14 +204,23 @@ class PropensityAuditor:
         diagnostics: Dict[str, Any] = {
             "summary": {},
             "histograms": {},
+            "weight_diagnostics": {},
         }
 
         # Histogram bins [0, 1]
         bins = np.linspace(0, 1, 21).tolist()
+        weights = self.compute_weights(df, stabilized=True)
 
         for c in self.classes_:
             col_name = f"propensity_{c}"
             props = prop_df[col_name].values
+            arm_mask = t_vals == c
+            arm_weights = weights[arm_mask]
+            weight_sum = float(np.sum(arm_weights))
+            squared_weight_sum = float(np.sum(arm_weights ** 2))
+            effective_sample_size = (
+                weight_sum ** 2 / squared_weight_sum if squared_weight_sum > 0 else 0.0
+            )
 
             diagnostics["summary"][f"arm_{c}"] = {
                 "min": float(np.min(props)),
@@ -219,6 +228,14 @@ class PropensityAuditor:
                 "median": float(np.median(props)),
                 "p75": float(np.percentile(props, 75)),
                 "max": float(np.max(props)),
+            }
+            diagnostics["weight_diagnostics"][f"arm_{c}"] = {
+                "observations": int(np.sum(arm_mask)),
+                "effective_sample_size": round(effective_sample_size, 2),
+                "effective_sample_size_fraction": round(
+                    effective_sample_size / max(int(np.sum(arm_mask)), 1), 4
+                ),
+                "max_weight": round(float(np.max(arm_weights)), 4) if len(arm_weights) else 0.0,
             }
 
             # Histograms conditioned on actual received treatment

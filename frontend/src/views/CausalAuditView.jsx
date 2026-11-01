@@ -389,6 +389,41 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
         </div>
       </div>
 
+      <div className="card">
+        <div className="card-title">
+          <Activity size={20} color="var(--accent-cyan)" />
+          <span>Effective Sample Size After IPW</span>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
+          Weight concentration reduces the information available for estimation. Effective sample size (ESS)
+          summarizes that loss within each observed treatment arm; it is not the raw customer count.
+        </p>
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Treatment arm</th>
+                <th>Observed customers</th>
+                <th>Effective sample size</th>
+                <th>Retained information</th>
+                <th>Maximum IPW</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(overlap?.weight_diagnostics || {}).map(([arm, metrics]) => (
+                <tr key={arm}>
+                  <td style={{ fontWeight: 600 }}>${arm.replace('arm_', '')}</td>
+                  <td>{metrics.observations.toLocaleString()}</td>
+                  <td>{metrics.effective_sample_size.toLocaleString()}</td>
+                  <td>{(metrics.effective_sample_size_fraction * 100).toFixed(1)}%</td>
+                  <td>{metrics.max_weight.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Covariate Balance Table */}
       <div className="card">
         <div className="card-title">

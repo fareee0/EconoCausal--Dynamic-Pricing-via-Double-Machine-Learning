@@ -124,6 +124,14 @@ def test_phase1_propensity_and_balance(dataset_fixture):
     trimmed_df, n_trimmed = trim_extreme_propensities(df_obs, auditor, min_propensity=0.02, max_propensity=0.98)
     assert len(trimmed_df) <= len(df_obs)
 
+    diagnostics = auditor.get_overlap_diagnostics(df_obs)["weight_diagnostics"]
+    assert set(diagnostics) == {"arm_0", "arm_10", "arm_20"}
+    for arm, metrics in diagnostics.items():
+        assert metrics["observations"] > 0
+        assert 0 < metrics["effective_sample_size"] <= metrics["observations"]
+        assert 0 < metrics["effective_sample_size_fraction"] <= 1
+        assert metrics["max_weight"] > 0
+
 
 def test_fastapi_endpoints():
     """Verify FastAPI endpoints /health, /data/summary, and /audit."""
@@ -155,6 +163,7 @@ def test_fastapi_endpoints():
     assert "balance_table" in audit
     assert "overlap" in audit
     assert audit["summary_metrics"]["pct_balanced_smd_under_0_10"] >= 80.0
+    assert audit["overlap"]["weight_diagnostics"]["arm_0"]["effective_sample_size"] > 0
 
 
 def test_uplift_endpoint_returns_summary():
