@@ -398,6 +398,10 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
           Weight concentration reduces the information available for estimation. Effective sample size (ESS)
           summarizes that loss within each observed treatment arm; it is not the raw customer count.
         </p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginBottom: '16px' }}>
+          Assignment support also reports customers whose estimated probability of receiving their observed
+          discount was below 5%; frequent low-probability assignments can signal weak overlap.
+        </p>
         <div className="table-wrapper">
           <table className="data-table">
             <thead>
@@ -407,18 +411,29 @@ export default function CausalAuditView({ onNavigateUplift, onNavigateData }) {
                 <th>Effective sample size</th>
                 <th>Retained information</th>
                 <th>Maximum IPW</th>
+                <th>Median received-arm propensity</th>
+                <th>Observed below 0.05</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(overlap?.weight_diagnostics || {}).map(([arm, metrics]) => (
-                <tr key={arm}>
-                  <td style={{ fontWeight: 600 }}>${arm.replace('arm_', '')}</td>
-                  <td>{metrics.observations.toLocaleString()}</td>
-                  <td>{metrics.effective_sample_size.toLocaleString()}</td>
-                  <td>{(metrics.effective_sample_size_fraction * 100).toFixed(1)}%</td>
-                  <td>{metrics.max_weight.toFixed(2)}</td>
-                </tr>
-              ))}
+              {Object.entries(overlap?.weight_diagnostics || {}).map(([arm, metrics]) => {
+                const support = overlap?.assignment_support?.[arm];
+                return (
+                  <tr key={arm}>
+                    <td style={{ fontWeight: 600 }}>${arm.replace('arm_', '')}</td>
+                    <td>{metrics.observations.toLocaleString()}</td>
+                    <td>{metrics.effective_sample_size.toLocaleString()}</td>
+                    <td>{(metrics.effective_sample_size_fraction * 100).toFixed(1)}%</td>
+                    <td>{metrics.max_weight.toFixed(2)}</td>
+                    <td>{support?.median_received_propensity?.toFixed(3) ?? '—'}</td>
+                    <td>
+                      {support
+                        ? `${support.low_propensity_count.toLocaleString()} (${(support.low_propensity_fraction * 100).toFixed(1)}%)`
+                        : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

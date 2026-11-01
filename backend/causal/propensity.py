@@ -205,6 +205,7 @@ class PropensityAuditor:
             "summary": {},
             "histograms": {},
             "weight_diagnostics": {},
+            "assignment_support": {},
         }
 
         # Histogram bins [0, 1]
@@ -216,11 +217,13 @@ class PropensityAuditor:
             props = prop_df[col_name].values
             arm_mask = t_vals == c
             arm_weights = weights[arm_mask]
+            received_arm_props = props[arm_mask]
             weight_sum = float(np.sum(arm_weights))
             squared_weight_sum = float(np.sum(arm_weights ** 2))
             effective_sample_size = (
                 weight_sum ** 2 / squared_weight_sum if squared_weight_sum > 0 else 0.0
             )
+            low_propensity_count = int(np.sum(received_arm_props < 0.05))
 
             diagnostics["summary"][f"arm_{c}"] = {
                 "min": float(np.min(props)),
@@ -236,6 +239,18 @@ class PropensityAuditor:
                     effective_sample_size / max(int(np.sum(arm_mask)), 1), 4
                 ),
                 "max_weight": round(float(np.max(arm_weights)), 4) if len(arm_weights) else 0.0,
+            }
+            diagnostics["assignment_support"][f"arm_{c}"] = {
+                "observations": int(np.sum(arm_mask)),
+                "median_received_propensity": (
+                    round(float(np.median(received_arm_props)), 4)
+                    if len(received_arm_props) else 0.0
+                ),
+                "low_propensity_threshold": 0.05,
+                "low_propensity_count": low_propensity_count,
+                "low_propensity_fraction": round(
+                    low_propensity_count / max(int(np.sum(arm_mask)), 1), 4
+                ),
             }
 
             # Histograms conditioned on actual received treatment

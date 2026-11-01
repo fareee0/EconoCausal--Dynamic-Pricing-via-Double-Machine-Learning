@@ -99,6 +99,7 @@ python -m backend.data.generate_churn_campaign
    - Positivity / overlap check across all three arms ($d \in \{0, 10, 20\}$).
    - Stabilized Inverse Propensity Weighting (IPW).
    - Per-arm effective sample size (ESS), retained-information fraction, and maximum weight to flag weight concentration.
+   - Per-arm observed treatment-propensity summaries, including the share assigned with estimated probability below 0.05.
    - **Balance Result**: **100% of covariates achieved Standardized Mean Difference (SMD) < 0.10** after weighting (max unweighted SMD was $0.4891$, reduced to $0.0362$).
    - Extreme propensity trimming: 4 out of 20,000 units trimmed (< 0.02%).
 3. **Frontend Dashboard (`frontend/`)**:

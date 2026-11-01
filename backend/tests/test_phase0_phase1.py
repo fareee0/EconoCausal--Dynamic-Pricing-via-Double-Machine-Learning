@@ -124,13 +124,26 @@ def test_phase1_propensity_and_balance(dataset_fixture):
     trimmed_df, n_trimmed = trim_extreme_propensities(df_obs, auditor, min_propensity=0.02, max_propensity=0.98)
     assert len(trimmed_df) <= len(df_obs)
 
-    diagnostics = auditor.get_overlap_diagnostics(df_obs)["weight_diagnostics"]
-    assert set(diagnostics) == {"arm_0", "arm_10", "arm_20"}
-    for arm, metrics in diagnostics.items():
+    overlap = auditor.get_overlap_diagnostics(df_obs)
+    weight_diagnostics = overlap["weight_diagnostics"]
+    assert set(weight_diagnostics) == {"arm_0", "arm_10", "arm_20"}
+    for arm, metrics in weight_diagnostics.items():
         assert metrics["observations"] > 0
         assert 0 < metrics["effective_sample_size"] <= metrics["observations"]
         assert 0 < metrics["effective_sample_size_fraction"] <= 1
         assert metrics["max_weight"] > 0
+
+    support = overlap["assignment_support"]
+    for arm, metrics in support.items():
+        treatment = int(arm.removeprefix("arm_"))
+        received_mask = df_obs["discount_amount"] == treatment
+        received_propensity = props.loc[received_mask, f"propensity_{treatment}"]
+        assert metrics["observations"] == int(received_mask.sum())
+        assert metrics["median_received_propensity"] == pytest.approx(
+            received_propensity.median(), abs=0.0001
+        )
+        assert metrics["low_propensity_count"] == int((received_propensity < 0.05).sum())
+        assert 0 <= metrics["low_propensity_fraction"] <= 1
 
 
 def test_fastapi_endpoints():
@@ -164,6 +177,7 @@ def test_fastapi_endpoints():
     assert "overlap" in audit
     assert audit["summary_metrics"]["pct_balanced_smd_under_0_10"] >= 80.0
     assert audit["overlap"]["weight_diagnostics"]["arm_0"]["effective_sample_size"] > 0
+    assert "arm_0" in audit["overlap"]["assignment_support"]
 
 
 def test_uplift_endpoint_returns_summary():
