@@ -5,9 +5,11 @@ import CausalAuditView from './views/CausalAuditView';
 import UpliftView from './views/UpliftView';
 import PrescriptionView from './views/PrescriptionView';
 import ChurnPredictionView from './views/ChurnPredictionView';
+import CampaignTimelineView from './views/CampaignTimelineView';
 import { getDataSummary } from './api';
 
 const viewLabels = {
+  timeline: 'Campaign Timeline',
   data_budget: 'Data & Budget',
   causal_audit: 'Causal Audit',
   uplift: 'Uplift & DML',
@@ -68,6 +70,12 @@ export default function App() {
           </div>
         ) : (
           <>
+            {activeView === 'timeline' && (
+              <CampaignTimelineView
+                dataSummary={dataSummary}
+                onNavigate={setActiveView}
+              />
+            )}
             {activeView === 'data_budget' && (
               <DataBudgetView
                 dataSummary={dataSummary}

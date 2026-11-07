@@ -1,8 +1,9 @@
 import React from 'react';
-import { Activity, Database, GitGraph, TrendingUp, SlidersHorizontal, ShieldCheck, UserRoundX } from 'lucide-react';
+import { Activity, Clock3, Database, GitGraph, TrendingUp, SlidersHorizontal, ShieldCheck, UserRoundX } from 'lucide-react';
 
 export default function Sidebar({ activeView, setActiveView, isConnected = true }) {
   const navItems = [
+    { id: 'timeline', label: 'Campaign Timeline', icon: Clock3, badge: '00' },
     { id: 'data_budget', label: 'Data & Budget', icon: Database, badge: '01' },
     { id: 'causal_audit', label: 'Causal Audit', icon: GitGraph, badge: '02' },
     { id: 'uplift', label: 'Uplift & DML', icon: TrendingUp, badge: '03' },
