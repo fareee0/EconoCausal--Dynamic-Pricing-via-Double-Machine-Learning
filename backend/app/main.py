@@ -12,6 +12,7 @@ Provides REST endpoints for:
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import csv
 import io
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
@@ -219,14 +220,53 @@ def export_dataset():
 @app.post("/upload", response_model=DataSummaryResponse)
 async def upload_dataset(file: UploadFile = File(...)):
     """Upload CSV dataset, update active state, invalidate audit cache."""
+    filename = file.filename or "uploaded_campaign.csv"
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Choose a file with the .csv extension.")
+
     try:
         content = await file.read()
-        df = pd.read_csv(io.BytesIO(content))
-        if df.empty:
+        if not content.strip():
             raise HTTPException(status_code=400, detail="Uploaded CSV file is empty.")
 
+        try:
+            reader = csv.reader(
+                io.StringIO(content.decode("utf-8-sig"), newline=""),
+                strict=True,
+            )
+            header = next(reader, None)
+            if header:
+                for row in reader:
+                    if row and len(row) != len(header):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="CSV rows have inconsistent columns. Check the delimiter and field count.",
+                        )
+        except csv.Error:
+            raise HTTPException(
+                status_code=400,
+                detail="CSV contains invalid quoting. Check that quoted fields are closed.",
+            )
+
+        df = pd.read_csv(io.BytesIO(content))
+        if df.empty or df.dropna(how="all").empty:
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must include a header row and at least one non-empty data row.",
+            )
+        unnamed_columns = [
+            column
+            for column in df.columns
+            if str(column).strip().lower().startswith("unnamed:")
+        ]
+        if len(unnamed_columns) == len(df.columns):
+            raise HTTPException(
+                status_code=400,
+                detail="CSV must include at least one named column in its header.",
+            )
+
         STATE["df"] = df
-        STATE["filename"] = file.filename or "uploaded_campaign.csv"
+        STATE["filename"] = filename
         STATE["audit_cache"] = None  # invalidate cache
 
         # Re-map common column names when the uploaded dataset differs from the active one.
@@ -278,6 +318,21 @@ async def upload_dataset(file: UploadFile = File(...)):
         )
     except HTTPException:
         raise
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must include a header row and at least one data row.",
+        )
+    except pd.errors.ParserError:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV rows have inconsistent columns. Check the delimiter and field count.",
+        )
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must use UTF-8 text encoding.",
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process CSV: {str(e)}")
 

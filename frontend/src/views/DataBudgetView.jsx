@@ -10,6 +10,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
   const [savingConfig, setSavingConfig] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const [previewSearch, setPreviewSearch] = useState('');
   const [sortColumn, setSortColumn] = useState('');
   const [sortDirection, setSortDirection] = useState('asc');
@@ -47,9 +48,21 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
   };
 
   const handleFileUpload = async (file) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setUploadError('Choose a file with the .csv extension.');
+      setSuccessMsg('');
+      return;
+    }
+    if (file.size === 0) {
+      setUploadError('The selected CSV is empty. Choose a file that contains data.');
+      setSuccessMsg('');
+      return;
+    }
+
     try {
       setUploading(true);
       setSuccessMsg('');
+      setUploadError('');
       const updatedSummary = await uploadDataset(file);
       onDataRefresh(updatedSummary);
       setTreatment(updatedSummary.column_mapping.treatment);
@@ -63,7 +76,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
       setSuccessMsg(`Successfully uploaded ${file.name} (${updatedSummary.row_count.toLocaleString()} rows)`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
-      alert(`Upload error: ${err?.response?.data?.detail || err.message}`);
+      setUploadError(err?.response?.data?.detail || err.message || 'The CSV could not be uploaded.');
     } finally {
       setUploading(false);
     }
@@ -190,6 +203,11 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
           {successMsg}
         </div>
       )}
+      {uploadError && (
+        <div className="info-box" role="alert" style={{ borderColor: '#efb7b7', background: '#fff1f1', color: '#9b2525' }}>
+          {uploadError}
+        </div>
+      )}
 
       {/* KPI Overview */}
       <div className="kpi-grid">
@@ -222,6 +240,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
+        aria-busy={uploading}
       >
         <input
           type="file"
@@ -230,6 +249,7 @@ export default function DataBudgetView({ dataSummary, onDataRefresh, onNavigateA
           accept=".csv"
           onChange={(e) => {
             if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+            e.target.value = '';
           }}
         />
         <UploadCloud className="dropzone-icon" size={48} />

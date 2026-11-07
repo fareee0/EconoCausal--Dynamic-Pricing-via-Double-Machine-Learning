@@ -180,6 +180,46 @@ def test_fastapi_endpoints():
     assert "arm_0" in audit["overlap"]["assignment_support"]
 
 
+@pytest.mark.parametrize(
+    ("filename", "content", "message"),
+    [
+        ("customers.txt", b"name,purchased\nAda,1\n", "Choose a file with the .csv extension."),
+        ("empty.csv", b"", "Uploaded CSV file is empty."),
+        (
+            "headers_only.csv",
+            b"name,purchased\n",
+            "CSV must include a header row and at least one non-empty data row.",
+        ),
+        (
+            "malformed.csv",
+            b"name,purchased\nAda,1,extra\n",
+            "CSV rows have inconsistent columns. Check the delimiter and field count.",
+        ),
+        (
+            "unnamed.csv",
+            b",\n1,2\n",
+            "CSV must include at least one named column in its header.",
+        ),
+    ],
+)
+def test_upload_reports_csv_validation_errors_without_replacing_dataset(
+    filename, content, message, monkeypatch
+):
+    original = pd.DataFrame({"customer": ["existing"], "purchased": [1]})
+    monkeypatch.setitem(STATE, "df", original)
+    monkeypatch.setitem(STATE, "filename", "existing.csv")
+
+    response = TestClient(app).post(
+        "/upload",
+        files={"file": (filename, content, "text/csv")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == message
+    assert STATE["df"] is original
+    assert STATE["filename"] == "existing.csv"
+
+
 def test_uplift_endpoint_returns_summary():
     client = TestClient(app)
     response = client.get("/uplift")
